@@ -14,9 +14,9 @@ from keras.callbacks import TensorBoard, ModelCheckpoint
 from keras.utils import np_utils
 from keras.preprocessing import image
 
-IMG_SIZE = 125
+IMG_SIZE = 300
 LR = 1e-3
-INPUT_SHAPE = (IMG_SIZE, IMG_SIZE, 1)
+INPUT_SHAPE = (IMG_SIZE, IMG_SIZE, 3)
 
 # MODEL_NAME = 'trained-model-{}-{}.model'.format(LR, '5conv-basic2')
 
@@ -35,7 +35,7 @@ def create_train_data(train_dir, data_name='train'):
         label = label_img(img)
         path = os.path.join(train_dir, img)
         img = cv2.resize(
-            cv2.imread(path, cv2.IMREAD_GRAYSCALE), (IMG_SIZE, IMG_SIZE))
+            cv2.imread(path, cv2.IMREAD_COLOR), (IMG_SIZE, IMG_SIZE))
         training_data.append([np.array(img), np.array(label)])
     # shuffle(training_data)
     np.save('{}_data.npy'.format(data_name), training_data)
@@ -101,15 +101,15 @@ def main():
     test_data = create_train_data(test_dir, 'test')
 
     train_x = np.array([i[0] for i in train_data]).reshape(
-        -1, IMG_SIZE, IMG_SIZE, 1)
+        -1, INPUT_SHAPE[0], INPUT_SHAPE[1], INPUT_SHAPE[2])
     test_x = np.array([i[1] for i in train_data])
 
     train_y = np.array([i[0] for i in validation_data]).reshape(
-        -1, IMG_SIZE, IMG_SIZE, 1)
+        -1, INPUT_SHAPE[0], INPUT_SHAPE[1], INPUT_SHAPE[2])
     test_y = np.array([i[1] for i in validation_data])
 
     train_z = np.array([i[0] for i in test_data]).reshape(
-        -1, IMG_SIZE, IMG_SIZE, 1)
+        -1, INPUT_SHAPE[0], INPUT_SHAPE[1], INPUT_SHAPE[2])
     test_z = np.array([i[1] for i in test_data])
 
     # model = Sequential()
@@ -162,7 +162,7 @@ def main():
 
     model = Sequential()
     model.add(Conv2D(32, kernel_size=(3, 3), activation='relu',
-                     input_shape=(IMG_SIZE, IMG_SIZE, 1)))
+                     input_shape=INPUT_SHAPE))
     model.add(MaxPooling2D(pool_size=(2, 2)))
     model.add(BatchNormalization(epsilon=LR))
     model.add(Conv2D(64, kernel_size=(3, 3), activation='relu'))
@@ -196,7 +196,7 @@ def main():
     #     model.load_weights('real_vs_fake_weights.h5')
     #     print('Model Loaded!')
     # else:
-    model.fit(train_x, test_x, batch_size=50, epochs=40,
+    model.fit(train_x, test_x, batch_size=50, epochs=10,
               validation_data=(train_y, test_y), callbacks=[tb_call_back])
 
     scores = model.evaluate(train_z, test_z, verbose=1)
