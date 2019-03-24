@@ -35,7 +35,7 @@ def create_train_data(train_dir, data_name='train'):
         label = label_img(img)
         path = os.path.join(train_dir, img)
         img = cv2.resize(
-            cv2.imread(path, cv2.IMREAD_COLOR), (IMG_SIZE, IMG_SIZE))
+            cv2.imread(path, cv2.IMREAD_GRAYSCALE), (IMG_SIZE, IMG_SIZE))
         training_data.append([np.array(img), np.array(label)])
     # shuffle(training_data)
     np.save('{}_data.npy'.format(data_name), training_data)
@@ -46,17 +46,24 @@ def main():
     tf.keras.backend.clear_session()
 
     parser = ArgumentParser(__doc__)
-    parser.add_argument("--train_data", required=True,
+    parser.add_argument("--train_data", required=False,
                         help="directory for training data")
-    parser.add_argument("--test_data", required=True,
+    parser.add_argument("--test_data", required=False,
                         help="directory for testing data")
-    parser.add_argument("--validation_data", required=True,
+    parser.add_argument("--validation_data", required=False,
                         help="directory for validation data")
     args = parser.parse_args()
 
-    train_dir = args.train_data
-    test_dir = args.test_data
-    validation_dir = args.validation_data
+    train_dir = './data/training'
+    test_dir = './data/test'
+    validation_dir = './data/validation'
+
+    if args.train_data:
+        train_dir = args.train_data
+    if args.test_data:
+        test_dir = args.test_data
+    if args.validation_data:
+        validation_dir = args.validation_data
 
     # def create_model():
     #     model = Sequential()
@@ -173,8 +180,8 @@ def main():
     model.add(Dropout(0.2))
     model.add(Flatten())
     model.add(Dense(128, activation='relu'))
-    # model.add(Dropout(0.3))
-    model.add(Dense(2, activation='softmax'))
+    model.add(Dropout(0.3))
+    model.add(Dense(2, activation='sigmoid'))
 
     model.compile(loss='binary_crossentropy', optimizer='adam',
                   metrics=['accuracy'])
@@ -189,7 +196,7 @@ def main():
     #     model.load_weights('real_vs_fake_weights.h5')
     #     print('Model Loaded!')
     # else:
-    model.fit(train_x, test_x, batch_size=50, epochs=20,
+    model.fit(train_x, test_x, batch_size=50, epochs=40,
               validation_data=(train_y, test_y), callbacks=[tb_call_back])
 
     scores = model.evaluate(train_z, test_z, verbose=1)
