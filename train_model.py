@@ -12,6 +12,7 @@ from tflearn.layers.conv import conv_2d, max_pool_2d
 from tflearn.layers.core import input_data, dropout, fully_connected
 from tflearn.layers.estimator import regression
 from pathlib import Path
+import tensorflow as tf
 
 IMG_SIZE = 125
 LR = 1e-3
@@ -53,6 +54,7 @@ def process_test_data(test_dir):
 
 
 def main():
+    tf.reset_default_graph()
     parser = ArgumentParser(__doc__)
     parser.add_argument("--train_data", required=True,
                         help="train")
@@ -73,13 +75,13 @@ def main():
     convnet = input_data(shape=[None, IMG_SIZE, IMG_SIZE, 1], name='input')
 
     convnet = conv_2d(convnet, 32, 5, activation='relu')
-    convnet = max_pool_2d(convnet, 5)
+    convnet = max_pool_2d(convnet, 3)
 
     convnet = conv_2d(convnet, 64, 5, activation='relu')
     convnet = max_pool_2d(convnet, 5)
 
     convnet = conv_2d(convnet, 128, 5, activation='relu')
-    convnet = max_pool_2d(convnet, 5)
+    convnet = max_pool_2d(convnet, 7)
 
     convnet = conv_2d(convnet, 64, 5, activation='relu')
     convnet = max_pool_2d(convnet, 5)
