@@ -215,7 +215,7 @@ def main():
 
         y = fig.add_subplot(6, 4, num + 1)
         orig = img_data
-        data = img_data.reshape(IMG_SIZE, IMG_SIZE, 1)
+        data = img_data.reshape(INPUT_SHAPE[0], INPUT_SHAPE[1], INPUT_SHAPE[2])
         model_out = model.predict(np.array([data, ]))
 
         if np.argmax(model_out) == 1:
