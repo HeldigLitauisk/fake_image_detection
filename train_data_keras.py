@@ -3,8 +3,8 @@ from argparse import ArgumentParser
 from random import shuffle
 
 import cv2
-from keras import Model
-from keras.applications import ResNet50, VGG19, InceptionV3, MobileNetV2
+from keras import Model, Input
+from keras.applications import ResNet50, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception
 from keras.applications.imagenet_utils import preprocess_input, decode_predictions
 from keras.optimizers import SGD
 from keras_preprocessing.image import load_img, img_to_array
@@ -17,51 +17,85 @@ from keras.models import Sequential
 from keras.layers import Dense, Flatten, Conv2D, MaxPooling2D, Dropout, BatchNormalization, LeakyReLU, Activation
 from keras.callbacks import TensorBoard, ModelCheckpoint
 from keras.utils import np_utils
-from keras.preprocessing import image
+from keras.preprocessing.image import ImageDataGenerator
 import ssl
-from models.custom_model import create_alexnet_model, create_custom_model, create_vgg_model
 
 ssl._create_default_https_context = ssl._create_unverified_context
 sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
 
 # CHANGE HERE
 OPTIMIZER = ['adam', sgd][0]
-IMG_SIZE = [224, 299, 600, 96][3]
+IMG_SIZE = [224, 299, 600, 96][1]
 POOLING = ['avg', 'max', None][0]
-DROPOUT = [0.3, 0.4, 0.5][1]
+DROPOUT = [0.3, 0.4, 0.5][0]
 DENSE_LAYER_ACTIVATION = ['softmax', 'sigmoid'][0]
 OBJECTIVE_FUNCTION = ['binary_crossentropy', 'categorical_crossentropy'][0]
 LOSS_METRIC = ['accuracy']
-TRANSFER_LEARNING = [ResNet50, VGG19, InceptionV3, MobileNetV2][3]
+TRANSFER_LEARNING = [ResNet50, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-1]
 
 INPUT_SHAPE = (IMG_SIZE, IMG_SIZE, 3)
 LR = 1e-3
 NUMBER_OF_CLASSES = 2
 CHANNELS = 3
-NUM_EPOCHS = 1
-BATCH_SIZE = 50
+NUM_EPOCHS = 3
+BATCH_SIZE = 32
 MODEL_NAME = 'model_{}_{}_{}.model'.format(
     IMG_SIZE, DENSE_LAYER_ACTIVATION, NUM_EPOCHS)
+CONV_LAYERS = []
+DENSE_LAYERS = []
+
+
+def create_full_transfer_learning_model():
+    # Best performance: XX %
+
+    tf.keras.backend.clear_session()
+    input_tensor = Input(shape=INPUT_SHAPE)
+    base_model = TRANSFER_LEARNING(
+        include_top=True,
+        weights='imagenet',
+        input_tensor=input_tensor,
+        input_shape=INPUT_SHAPE,
+        pooling=POOLING)
+    op = Dense(128, activation='relu')(base_model.output)
+    op = Dropout(DROPOUT)(op)
+    output_tensor = Dense(NUMBER_OF_CLASSES,
+                          activation=DENSE_LAYER_ACTIVATION)(op)
+    model = Model(inputs=input_tensor, outputs=output_tensor)
+    return model
 
 
 def create_transfer_learning_model():
     # Best performance: XX %
 
-    model = Sequential()
     tf.keras.backend.clear_session()
-    model.add(TRANSFER_LEARNING(
-        include_top=False, pooling=POOLING, input_shape=INPUT_SHAPE))
-    model.layers[0].trainable = False
-    model.add(Dense(2, activation=DENSE_LAYER_ACTIVATION))
+    input_tensor = Input(shape=INPUT_SHAPE)
+    base_model = TRANSFER_LEARNING(
+        include_top=False,
+        weights='imagenet',
+        input_tensor=input_tensor,
+        input_shape=INPUT_SHAPE,
+        pooling=POOLING)
+
+    for layer in base_model.layers:
+        layer.trainable = False
+    op = Dense(120, activation='relu')(base_model.output)
+    op = Dropout(DROPOUT)(op)
+    op = Dense(84, activation='relu')(op)
+    op = Dropout(DROPOUT)(op)
+    op = Dense(10, activation='relu')(op)
+    op = Dropout(DROPOUT)(op)
+
+    output_tensor = Dense(NUMBER_OF_CLASSES,
+                          activation=DENSE_LAYER_ACTIVATION)(op)
+    model = Model(inputs=input_tensor, outputs=output_tensor)
     return model
 
 
 def label_img(img):
     if img.split('/')[-1].startswith('real'):
-        return [1, 0]
+        return np_utils.to_categorical(1, num_classes=NUMBER_OF_CLASSES)
     else:
-        # For fakes
-        return [0, 1]
+        return np_utils.to_categorical(0, num_classes=NUMBER_OF_CLASSES)
 
 
 def create_train_data(train_dir, data_name='train'):
@@ -78,7 +112,7 @@ def create_train_data(train_dir, data_name='train'):
         image = image.reshape(
             (1, image.shape[0], image.shape[1], image.shape[2]))
         image = preprocess_input(image)
-        training_data.append([image, np.array(label), path])
+        training_data.append([image, label, path])
     shuffle(training_data)
     np.save(npy_data_data, training_data)
     return training_data
@@ -88,6 +122,7 @@ def plot_data(data, model):
     fig = plt.figure()
     for num, data in enumerate(data[:24]):
         img_num = data[1]
+        print(img_num)
         truth = 'Real' if img_num[0] == 1 else 'Fake'
 
         y = fig.add_subplot(12, 2, num + 1)
@@ -111,7 +146,7 @@ def load_data(data_dir, data_type='train'):
     train_data = create_train_data(data_dir, data_type)
     train = np.array([i[0] for i in train_data]).reshape(
         -1, INPUT_SHAPE[0], INPUT_SHAPE[1], INPUT_SHAPE[2])
-    test = np.array([i[1] for i in train_data])
+    test = [i[1] for i in train_data]
     return train, test
 
 
@@ -131,9 +166,26 @@ def evaluate_group(data, model, group_name='all'):
             grouped_test.append(element[1])
     train = np.array(grouped_train).reshape(
         -1, INPUT_SHAPE[0], INPUT_SHAPE[1], INPUT_SHAPE[2])
-    test = np.array(grouped_test)
+    test = grouped_test
     scores = model.evaluate(train, test, verbose=1)
     print("Accuracy %s: %.2f%%" % (group_name, scores[1] * 100))
+
+
+def data_generator(x_data, y_data, training_data=True):
+    if training_data:
+        datagen = ImageDataGenerator(
+            rescale=1. / 255,
+            rotation_range=20,
+            width_shift_range=0.2,
+            height_shift_range=0.2,
+            horizontal_flip=True,
+            fill_mode='nearest')
+        datagen.fit(x_data)
+        return datagen.flow(
+            x_data, y_data, batch_size=BATCH_SIZE,
+            save_to_dir='./augmentations/')
+    datagen = ImageDataGenerator(rescale=1. / 255)
+    return datagen.flow(x_data, y_data, batch_size=BATCH_SIZE)
 
 
 def main():
@@ -163,16 +215,21 @@ def main():
                                histogram_freq=0, write_graph=True,
                                write_images=True)
 
-    train_x, test_x = load_data(train_dir, 'train')
-    train_y, test_y = load_data(validation_dir, 'validation')
-    train_z, test_z = load_data(test_dir, 'test')
+    x_train, y_train = load_data(train_dir, 'train')
+    x_valid, y_valid = load_data(validation_dir, 'validation')
+    # x_test, y_test = load_data(test_dir, 'test')
 
     model = create_transfer_learning_model()
     model.compile(
         loss=OBJECTIVE_FUNCTION, optimizer=OPTIMIZER, metrics=LOSS_METRIC)
     print(model.summary())
-    model.fit(train_x, test_x, batch_size=BATCH_SIZE, epochs=NUM_EPOCHS,
-              validation_data=(train_y, test_y), callbacks=[tb_call_back])
+
+    train_generator = data_generator(x_train, y_train)
+    valid_generator = data_generator(x_valid, y_valid, training_data=False)
+    model.fit_generator(
+        train_generator, steps_per_epoch=len(x_train) / BATCH_SIZE,
+        epochs=NUM_EPOCHS, validation_data=valid_generator,
+        validation_steps=len(x_valid) / BATCH_SIZE, callbacks=[tb_call_back])
 
     validation_data = create_train_data(validation_dir, 'validation')
     evaluate_group(validation_data, model)
