@@ -26,22 +26,22 @@ sgd = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
 
 # CHANGE HERE
 OPTIMIZER = ['adam', sgd][0]
-IMG_SIZE = [224, 299, 600, 96][1]
-POOLING = ['avg', 'max', None][2]
-DROPOUT = [0.3, 0.4, 0.5][0]
+IMG_SIZE = [224, 299, 600, 96, 255, 75][-1]
+POOLING = ['avg', 'max', None][0]
+DROPOUT = [0.3, 0.4, 0.5][2]
 DENSE_LAYER_ACTIVATION = ['softmax', 'sigmoid'][0]
-OBJECTIVE_FUNCTION = ['binary_crossentropy', 'categorical_crossentropy'][1]
+OBJECTIVE_FUNCTION = ['binary_crossentropy', 'categorical_crossentropy'][0]
 LOSS_METRIC = ['accuracy']
-TRANSFER_LEARNING = [ResNet50, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-1]
-NAME = ['ResNet50', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-1]
+TRANSFER_LEARNING = [ResNet50, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-2]
+NAME = ['ResNet50', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-2]
 PROCESSING = ['caffe', 'tf', 'torch'][1]
 
 INPUT_SHAPE = (IMG_SIZE, IMG_SIZE, 3)
 LR = 1e-3
 NUMBER_OF_CLASSES = 2
 CHANNELS = 3
-NUM_EPOCHS = 5
-BATCH_SIZE = 5
+NUM_EPOCHS = 50
+BATCH_SIZE = 20
 MODEL_NAME = 'model_{}_{}_{}_{}.model'.format(
     NAME, IMG_SIZE, DENSE_LAYER_ACTIVATION, NUM_EPOCHS)
 CONV_LAYERS = []
@@ -125,7 +125,7 @@ def create_train_data(train_dir, data_name='train', preprocess=True):
         training_data.append([image, label, path])
     shuffle(training_data)
     if preprocess:
-        np.save(npy_data_data, training_data)
+       np.save(npy_data_data, training_data, allow_pickle=True)
     return training_data
 
 
@@ -181,14 +181,15 @@ def evaluate_group(data, model, group_name='all'):
     print("Accuracy %s: %.2f%%" % (group_name, scores[1] * 100))
 
 
-def create_group(data, group_name='real'):
+def create_group(data, group_name):
     grouped_train = []
     for element in data:
         path = element[2]
-        if group_name in path:
+        if group_name == 'real' and 'real' in path:
             grouped_train.append(element[0])
-        else:
+        elif group_name == 'fake' and 'real' not in path:
             grouped_train.append(element[0])
+    print("There are {} {} images".format(len(grouped_train), group_name))
     return np.array(grouped_train).reshape(
         -1, INPUT_SHAPE[0], INPUT_SHAPE[1], INPUT_SHAPE[2])
 
@@ -213,10 +214,9 @@ def data_generator(x_data, y_data, training_data=True):
 def extract_features(x_data, y_data, base_model):
     sample_count = len(x_data)
 
-    features = np.zeros(shape=(
-        sample_count, base_model.output_shape[1], base_model.output_shape[2],
-        base_model.output_shape[3]))
-    labels = np.zeros(shape=(sample_count, 2))
+    features = np.zeros(shape=(sample_count, base_model.output_shape[1]))#, base_model.output_shape[2],
+        # base_model.output_shape[3]))
+    labels = np.zeros(shape=(sample_count, NUMBER_OF_CLASSES))
 
     data_generator = ImageDataGenerator(rescale=1./255)
     generator = data_generator.flow(x_data, y_data, batch_size=BATCH_SIZE)
@@ -226,8 +226,8 @@ def extract_features(x_data, y_data, base_model):
         features_batch = base_model.predict(inputs_batch)
         features[i * BATCH_SIZE: (i + 1) * BATCH_SIZE] = features_batch
         if i % 10 == 0:
-            print("Extracting features: %.2d%% out of %.2d%%" % (
-                i, sample_count))
+            print("Extracting features: {} out of {}".format(
+                BATCH_SIZE * i, sample_count))
         labels[i * BATCH_SIZE: (i + 1) * BATCH_SIZE] = labels_batch
         i += 1
         if i * BATCH_SIZE >= sample_count:
@@ -235,7 +235,7 @@ def extract_features(x_data, y_data, base_model):
     return features, labels
 
 
-def data_augmentation(dir, data_type='real', count=10):
+def data_augmentation(dir, data_type, count=2000):
     gnr_data = create_train_data(dir, 'train', False)
     data = create_group(gnr_data, data_type)
     datagen = ImageDataGenerator(
@@ -245,10 +245,16 @@ def data_augmentation(dir, data_type='real', count=10):
         horizontal_flip=True,
         fill_mode='nearest')
     datagen.fit(data)
-    for _ in range(0, count):
-        datagen.flow(
-            data, batch_size=BATCH_SIZE, save_to_dir='./data/train/',
-            save_prefix=data_type).next()
+    datagen.flow(
+        data, batch_size=count, save_to_dir='./data/training/',
+        save_prefix='{}_gnr_'.format(data_type)).next()
+
+
+def get_feat_count(output_shape):
+    count = 1
+    for i in range(1, tuple.count(output_shape)):
+        count = count * output_shape[i]
+    return count
 
 
 def main():
@@ -276,7 +282,7 @@ def main():
     if args.validation_data:
         validation_dir = args.validation_data
     if args.augmentation:
-        data_augmentation(train_dir, 'real')
+        data_augmentation(train_dir, 'fake')
         data_augmentation(train_dir, 'fake')
 
     tb_call_back = TensorBoard(log_dir='./graphs/{}/'.format(MODEL_NAME),
@@ -287,17 +293,22 @@ def main():
     x_valid, y_valid = load_data(validation_dir, 'validation')
     x_test, y_test = load_data(test_dir, 'test')
 
+    create_group(x_train, 'fake')
+    create_group(x_train, 'real')
+
     full_model, base_model = create_transfer_learning_model()
     output_shape = base_model.output_shape
 
     model = Sequential()
-    # x = layers.GlobalAveragePooling2D(name='avg_pool')(x)
-    # x = layers.Dense(classes, activation='softmax', name='predictions')(x)
-    model.add(Dense(4096, activation='relu',
-                    input_dim=output_shape[1] * output_shape[2] * output_shape[3]))
-    # model.add(Dropout(DROPOUT))
-    model.add(Dense(4096, activation='relu'))
-    model.add(Dense(1000, activation='relu'))
+    print(output_shape)
+    print(get_feat_count(output_shape))
+    dimensions = get_feat_count(output_shape)
+    model.add(Dense(120, activation='relu', input_dim=dimensions))#* output_shape[2] * output_shape[3]))
+    model.add(Dropout(DROPOUT))
+    model.add(Dense(84, activation='relu'))
+    model.add(Dropout(DROPOUT))
+    model.add(Dense(10, activation='relu'))
+
     model.add(Dense(NUMBER_OF_CLASSES, activation=DENSE_LAYER_ACTIVATION))
 
     model.compile(
@@ -329,9 +340,11 @@ def main():
         test_labels = bottleneck_features['test_labels']
         print('Loaded {} features from disk'.format(features_file))
 
-    train_features = np.reshape(train_features, (len(x_train), output_shape[1] * output_shape[2] * output_shape[3]))
-    validation_features = np.reshape(validation_features, (len(x_valid), output_shape[1] * output_shape[2] * output_shape[3]))
-    test_features = np.reshape(test_features, (len(x_test), output_shape[1] * output_shape[2] * output_shape[3]))
+    feat_shape = get_feat_count(output_shape)
+    train_features = np.reshape(train_features, (len(x_train), dimensions))
+    validation_features = np.reshape(validation_features, (len(x_valid), dimensions))
+    test_features = np.reshape(test_features, (len(x_test), dimensions))
+
 
     history = model.fit(
         train_features, train_labels, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE,
