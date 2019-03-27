@@ -30,7 +30,7 @@ IMG_SIZE = [224, 299, 600, 96, 255, 75][-1]
 POOLING = ['avg', 'max', None][0]
 DROPOUT = [0.3, 0.4, 0.5][2]
 DENSE_LAYER_ACTIVATION = ['softmax', 'sigmoid'][0]
-OBJECTIVE_FUNCTION = ['binary_crossentropy', 'categorical_crossentropy'][0]
+OBJECTIVE_FUNCTION = ['binary_crossentropy', 'categorical_crossentropy'][1]
 LOSS_METRIC = ['accuracy']
 TRANSFER_LEARNING = [ResNet50, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-2]
 NAME = ['ResNet50', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-2]
@@ -252,7 +252,7 @@ def data_augmentation(dir, data_type, count=2000):
 
 def get_feat_count(output_shape):
     count = 1
-    for i in range(1, tuple.count(output_shape)):
+    for i in range(1, len(output_shape)):
         count = count * output_shape[i]
     return count
 
@@ -284,6 +284,10 @@ def main():
     if args.augmentation:
         data_augmentation(train_dir, 'fake')
         data_augmentation(train_dir, 'fake')
+    else:
+        gnr_data = create_train_data(dir, 'train', True)
+        create_group(gnr_data, 'fake')
+        create_group(gnr_data, 'real')
 
     tb_call_back = TensorBoard(log_dir='./graphs/{}/'.format(MODEL_NAME),
                                histogram_freq=0, write_graph=True,
@@ -293,15 +297,12 @@ def main():
     x_valid, y_valid = load_data(validation_dir, 'validation')
     x_test, y_test = load_data(test_dir, 'test')
 
-    create_group(x_train, 'fake')
-    create_group(x_train, 'real')
+
 
     full_model, base_model = create_transfer_learning_model()
     output_shape = base_model.output_shape
 
     model = Sequential()
-    print(output_shape)
-    print(get_feat_count(output_shape))
     dimensions = get_feat_count(output_shape)
     model.add(Dense(120, activation='relu', input_dim=dimensions))#* output_shape[2] * output_shape[3]))
     model.add(Dropout(DROPOUT))
