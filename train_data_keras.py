@@ -31,12 +31,12 @@ LR = [1e-3, 0.01, 2e-5, 2e-4][0]
 OPTIMIZER = [Adam, SGD, RMSprop][0]
 IMG_SIZE = [224, 299, 600, 96, 255, 150][-3]
 POOLING = ['avg', 'max', None][0]
-DROPOUT = [0.3, 0.4, 0.5][-2]
+DROPOUT = [0.3, 0.4, 0.5][0]
 DENSE_LAYER_ACTIVATION = ['softmax', 'sigmoid'][1]
 LOSS = ['binary_crossentropy', 'categorical_crossentropy'][0]
 METRIC = ['acc']
-TRANSFER_LEARNING = [ResNet50, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-1]
-NAME = ['ResNet50', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-1]
+TRANSFER_LEARNING = [ResNet50, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-2]
+NAME = ['ResNet50', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-2]
 PROCESSING = ['caffe', 'tf', 'torch'][1]
 
 CHANNELS = 3
@@ -48,7 +48,7 @@ MODEL_NAME = 'model_{}_{}_{}_{}.model'.format(
     NAME, IMG_SIZE, DENSE_LAYER_ACTIVATION, NUM_EPOCHS)
 CONV = []
 # Change FULLY CONNECTED layers setup here
-LAYERS = [124, 'DROPOUT', 124, 10, 'DROPOUT']
+LAYERS = [124, 'DROPOUT', 124, 10]
 
 
 def create_full_transfer_learning_model():
@@ -203,18 +203,8 @@ def data_generator(x_data, y_data, training_data=True, name='fake'):
 
 
 def extract_features(train_dir):
-    real_count = len(os.listdir(os.path.join(train_dir, 'real')))
-    fake_count = len(os.listdir(os.path.join(train_dir, 'fake')))
-    sample_count = real_count + fake_count
-    print('Sample count: {}'.format(sample_count))
-
     pretrained_model = TRANSFER_LEARNING(
         weights='imagenet', include_top=False, input_shape=INPUT_SHAPE)
-
-    features = np.zeros(shape=(sample_count, pretrained_model.output_shape[1]*
-                               pretrained_model.output_shape[2]*
-                               pretrained_model.output_shape[3]))
-    labels = np.zeros(shape=(sample_count, NUMBER_OF_CLASSES))
 
     datagen = ImageDataGenerator(rescale=1./255)
     generator = datagen.flow_from_directory(
@@ -226,6 +216,10 @@ def extract_features(train_dir):
     )
     sample_count = generator.samples
     print('Sample count: {}'.format(sample_count))
+    features = np.zeros(shape=(sample_count, pretrained_model.output_shape[1] *
+                               pretrained_model.output_shape[2] *
+                               pretrained_model.output_shape[3]))
+    labels = np.zeros(shape=(sample_count, NUMBER_OF_CLASSES))
 
     i = 0
     for inputs_batch, labels_batch in generator:
@@ -338,7 +332,8 @@ def main():
     base_model = create_transfer_learning_model()
     output_shape = base_model.output_shape
 
-    features_file = './features/{}_features.npz'.format(NAME)
+    features_file = './features/{}_features_IMG-{}_BATCH-{}.npz'.format(
+        NAME, IMG_SIZE, BATCH_SIZE)
     if not os.path.exists(features_file):
         print('Creating features for first time')
         train_features, train_labels = extract_features(
