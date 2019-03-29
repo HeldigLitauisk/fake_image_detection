@@ -3,12 +3,14 @@ from argparse import ArgumentParser
 from random import shuffle
 
 import cv2
-from keras import Model, Input, optimizers
+from keras import Model, Input, optimizers, metrics
 from keras.applications import ResNet50, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception
 from keras.applications.imagenet_utils import preprocess_input, decode_predictions
 from keras.optimizers import SGD, RMSprop, Adam
 from keras_preprocessing.image import load_img, img_to_array
 from matplotlib.image import imread
+from sklearn.metrics import confusion_matrix
+from tensorflow.python.ops.logging_ops import image_summary
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
@@ -22,33 +24,34 @@ from keras.utils import np_utils, to_categorical
 from keras.preprocessing.image import ImageDataGenerator
 import ssl
 
-LR = [1e-3, 0.01, 2e-5, 2e-4][0]
-# sgd = SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
-# sgd2 = optimizers.sgd(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
-# rms = RMSprop(lr=LR)
-# adam = Adam(lr=LR)
+LR = [1e-3, 0.01, 2e-5, 2e-4, 1e-4, 5e-4, 146e-5][1]
+SGD2 = SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
 # CHANGE HERE
 OPTIMIZER = [Adam, SGD, RMSprop][0]
-IMG_SIZE = [224, 299, 600, 96, 255, 150][-3]
+IMG_SIZE = [224, 299, 600, 8, 96, 255, 150][-3]
 POOLING = ['avg', 'max', None][0]
 DROPOUT = [0.3, 0.4, 0.5][0]
 DENSE_LAYER_ACTIVATION = ['softmax', 'sigmoid'][1]
 LOSS = ['binary_crossentropy', 'categorical_crossentropy'][0]
 METRIC = ['acc']
-TRANSFER_LEARNING = [ResNet50, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-2]
-NAME = ['ResNet50', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-2]
+TRANSFER_LEARNING = [ResNet50, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-1]
+NAME = ['ResNet50', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-1]
+# [224, 224, 299, 224, 299, 299]
 PROCESSING = ['caffe', 'tf', 'torch'][1]
+
 
 CHANNELS = 3
 INPUT_SHAPE = (IMG_SIZE, IMG_SIZE, CHANNELS)
 NUMBER_OF_CLASSES = 2
-NUM_EPOCHS = 50
+NUM_EPOCHS = 32
 BATCH_SIZE = 32
-MODEL_NAME = 'model_{}_{}_{}_{}.model'.format(
-    NAME, IMG_SIZE, DENSE_LAYER_ACTIVATION, NUM_EPOCHS)
+MODEL_NAME = 'model_{}_{}_{}_{}_L_{}_{}_B-{}'.format(
+    NAME, IMG_SIZE, DENSE_LAYER_ACTIVATION, NUM_EPOCHS, LR, LOSS, PROCESSING,
+    BATCH_SIZE)
 CONV = []
 # Change FULLY CONNECTED layers setup here
-LAYERS = [124, 'DROPOUT', 124, 10]
+# LAYERS = [120, 'DROPOUT', 84]
+LAYERS = [512, 10]
 
 
 def create_full_transfer_learning_model():
@@ -188,7 +191,6 @@ def create_group(data, group_name):
 def data_generator(x_data, y_data, training_data=True, name='fake'):
     if training_data:
         datagen = ImageDataGenerator(
-            rescale=1. / 255,
             rotation_range=20,
             width_shift_range=0.2,
             height_shift_range=0.2,
@@ -223,7 +225,8 @@ def extract_features(train_dir):
 
     i = 0
     for inputs_batch, labels_batch in generator:
-        features_batch = pretrained_model.predict(inputs_batch)
+        features_batch = pretrained_model.predict(
+            preprocess_input(inputs_batch, mode=PROCESSING))
         op_shape = features_batch.shape
 
         features_batch = np.reshape(features_batch, (
@@ -301,6 +304,9 @@ def main():
                         help="directory for validation data")
     parser.add_argument("--augmentation", required=False,
                         help="whether should we do data augmentation")
+    parser.add_argument("--extract_only", required=False,
+                        help="If should run feature extraction only")
+
     args = parser.parse_args()
 
     train_dir = os.path.relpath('./data/training')
@@ -331,9 +337,12 @@ def main():
 
     base_model = create_transfer_learning_model()
     output_shape = base_model.output_shape
+    real_count = len(os.listdir(os.path.join(train_dir, 'real')))
+    fake_count = len(os.listdir(os.path.join(train_dir, 'fake')))
+    train_sample_count = real_count + fake_count
 
-    features_file = './features/{}_features_IMG-{}_BATCH-{}.npz'.format(
-        NAME, IMG_SIZE, BATCH_SIZE)
+    features_file = './features/{}_features_IMG-{}_Pre-{}_SAMPLE-{}.npz'.format(
+        NAME, IMG_SIZE, PROCESSING, train_sample_count)
     if not os.path.exists(features_file):
         print('Creating features for first time')
         train_features, train_labels = extract_features(
@@ -358,6 +367,9 @@ def main():
         test_labels = bottleneck_features['test_labels']
         print('Loaded {} features from disk'.format(features_file))
 
+    if args.extract_only:
+        return 0
+
     # train_features = np.reshape(train_features, (len(x_train), dimensions))
     # validation_features = np.reshape(validation_features, (len(x_valid), dimensions))
     # test_features = np.reshape(test_features, (len(x_test), dimensions))
@@ -367,12 +379,9 @@ def main():
     # print(base_model.summary())
     #
     # tf.keras.backend.clear_session()
-    # tb_call_back = TensorBoard(log_dir='./graphs/{}/'.format(MODEL_NAME),
-    #                            histogram_freq=0, write_graph=True,
-    #                            write_images=True)
-    real_count = len(os.listdir(os.path.join(train_dir, 'real')))
-    fake_count = len(os.listdir(os.path.join(train_dir, 'fake')))
-    train_sample_count = real_count + fake_count
+    tb_call_back = TensorBoard(log_dir='./graphs/{}/'.format(MODEL_NAME),
+                               histogram_freq=0, write_graph=True,
+                               write_images=True)
 
     dimensions = get_feat_count(base_model.output_shape)
     print(base_model.output_shape)
@@ -397,14 +406,15 @@ def main():
     print(model.summary())
     model.fit(
         train_features, train_labels, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE,
-        validation_data=(validation_features, validation_labels))
+        validation_data=(validation_features, validation_labels),
+        callbacks=[tb_call_back])
 
     scores = model.evaluate(validation_features, validation_labels, verbose=1,
                             batch_size=BATCH_SIZE)
     print("Accuracy: %.2f%%" % (scores[1] * 100))
-    scores = model.evaluate(test_features, test_labels, verbose=1,
+    scores_test = model.evaluate(test_features, test_labels, verbose=1,
                             batch_size=BATCH_SIZE)
-    print("Accuracy test: %.2f%%" % (scores[1] * 100))
+    print("Accuracy test: %.2f%%" % (scores_test[1] * 100))
 
     # plot_data(gnr_data, model)
 
@@ -442,19 +452,22 @@ def main():
         elif pred_label == 'real':
             wrong_real.append(errors[i])
         #################################
-        if i % 50 == 0:
-            print('Filename: {}, Original label:{}, Prediction:{}, confidence : {:.3f}'.format(
-                fnames[errors[i]].split('/')[-1],
-                fnames[errors[i]].split('/')[0],
-                pred_label,
-                prob[errors[i]][pred_class]))
-            original = load_img('{}/{}'.format(validation_dir, fnames[errors[i]]))
-            plt.imshow(original)
-            plt.show()
+        # if i % 50 == 0:
+        #     print('Filename: {}, Original label:{}, Prediction:{}, confidence : {:.3f}'.format(
+        #         fnames[errors[i]].split('/')[-1],
+        #         fnames[errors[i]].split('/')[0],
+        #         pred_label,
+        #         prob[errors[i]][pred_class]))
+        #     original = load_img('{}/{}'.format(validation_dir, fnames[errors[i]]))
+        #     plt.imshow(original)
+        #     plt.show()
     print('Fake % predicted incorrectly: {}%'.format(round(len(wrong_fakes) / len(errors) * 100), 2))
     print('Real % predicted incorrectly: {}%'.format(round(len(wrong_real) / len(errors) * 100), 2))
 
+    c_matrix = confusion_matrix(validation_labels.argmax(axis=1), predictions)
+    print(c_matrix)
 
+    # train_generator =
     # model.fit_generator(
     #     train_generator, steps_per_epoch=len(x_train) / BATCH_SIZE,
     #     epochs=NUM_EPOCHS, validation_data=valid_generator,
@@ -464,8 +477,8 @@ def main():
     # evaluate_group(x_valid, y_valid, model, 'fake')
     # print(validation_features)
 
-    model.save("./models/{}_model.h5".format(MODEL_NAME))
-    model.save_weights('./weights/{}_weights.h5'.format(MODEL_NAME))
+    model.save("./models/{}_model_score-{}.h5".format(MODEL_NAME, int(scores[1] * 100)))
+    model.save_weights('./weights/{}_weights_score-{}.h5'.format(MODEL_NAME, int(scores[1] * 100)))
 
     # gnr_data = create_train_data(validation_dir, 'validation')
     # plot_data(gnr_data, model)
