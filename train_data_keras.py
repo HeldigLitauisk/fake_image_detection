@@ -24,20 +24,20 @@ from keras.utils import np_utils, to_categorical
 from keras.preprocessing.image import ImageDataGenerator
 import ssl
 
-LR = [1e-3, 0.01, 2e-5, 2e-4, 1e-4, 5e-4, 146e-5][1]
+LR = [1e-3, 0.01, 2e-5, 2e-4, 1e-4, 5e-4, 146e-5][0]
 SGD2 = SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
 # CHANGE HERE
 OPTIMIZER = [Adam, SGD, RMSprop][0]
-IMG_SIZE = [224, 299, 600, 8, 96, 255, 150][-3]
+IMG_SIZE = [224, 299, 600, 8, 96, 255, 150][0]
 POOLING = ['avg', 'max', None][0]
 DROPOUT = [0.3, 0.4, 0.5][0]
 DENSE_LAYER_ACTIVATION = ['softmax', 'sigmoid'][1]
 LOSS = ['binary_crossentropy', 'categorical_crossentropy'][0]
 METRIC = ['acc']
-TRANSFER_LEARNING = [ResNet50, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-1]
-NAME = ['ResNet50', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-1]
+TRANSFER_LEARNING = [ResNet50, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][1]
+NAME = ['ResNet50', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][1]
 # [224, 224, 299, 224, 299, 299]
-PROCESSING = ['caffe', 'tf', 'torch'][1]
+PROCESSING = ['caffe', 'tf', 'torch'][0]
 
 
 CHANNELS = 3
@@ -51,7 +51,7 @@ MODEL_NAME = 'model_{}_{}_{}_{}_L_{}_{}_B-{}'.format(
 CONV = []
 # Change FULLY CONNECTED layers setup here
 # LAYERS = [120, 'DROPOUT', 84]
-LAYERS = [512, 10]
+LAYERS = [512]
 
 
 def create_full_transfer_learning_model():
@@ -208,7 +208,7 @@ def extract_features(train_dir):
     pretrained_model = TRANSFER_LEARNING(
         weights='imagenet', include_top=False, input_shape=INPUT_SHAPE)
 
-    datagen = ImageDataGenerator(rescale=1./255)
+    datagen = ImageDataGenerator()
     generator = datagen.flow_from_directory(
         train_dir,
         target_size=(IMG_SIZE, IMG_SIZE),
@@ -406,8 +406,7 @@ def main():
     print(model.summary())
     model.fit(
         train_features, train_labels, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE,
-        validation_data=(validation_features, validation_labels),
-        callbacks=[tb_call_back])
+        callbacks=[tb_call_back], validation_split=0.25)
 
     scores = model.evaluate(validation_features, validation_labels, verbose=1,
                             batch_size=BATCH_SIZE)
