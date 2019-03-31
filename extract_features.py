@@ -9,8 +9,8 @@ ssl._create_default_https_context = ssl._create_unverified_context
 
 IMG_SIZE = [224, 299, 600, 8, 96, 255, 150][0]
 POOLING = ['avg', 'max', None][0]
-TRANSFER_LEARNING = [ResNet50, VGG16, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-4]
-NAME = ['ResNet50', 'VGG16', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-4]
+TRANSFER_LEARNING = [ResNet50, VGG16, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-3]
+NAME = ['ResNet50', 'VGG16', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-3]
 # Models and respective images size and preprocessing
 # ['ResNet50', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception']
 # [224, 224, 224, 299, 224, 299, 299]
@@ -64,14 +64,16 @@ def generate_from_dir(train_dir):
         target_size=(IMG_SIZE, IMG_SIZE),
         batch_size=BATCH_SIZE,
         class_mode='binary',
-        subset='training')
+        subset='training',
+        seed=1992)
 
     validation_generator = datagen.flow_from_directory(
         train_dir,
         target_size=(IMG_SIZE, IMG_SIZE),
         batch_size=BATCH_SIZE,
         class_mode='binary',
-        subset='validation')
+        subset='validation',
+        seed=1992)
 
     train_filenames = train_generator.filenames
     test_filenames = validation_generator.filenames
