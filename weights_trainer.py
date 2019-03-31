@@ -7,6 +7,7 @@ import numpy as np
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
 from keras.callbacks import TensorBoard
+from keras_preprocessing.image import ImageDataGenerator
 
 LR = [1e-3, 0.01, 2e-5, 2e-4, 1e-4, 5e-4, 146e-5][2]
 SGD2 = SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
@@ -33,7 +34,7 @@ MODEL_NAME = 'model_{}_{}_{}_{}_L_{}_B-{}'.format(
     NAME, IMG_SIZE, DENSE_LAYER_ACTIVATION, NUM_EPOCHS, LR, LOSS, BATCH_SIZE)
 # Change FULLY CONNECTED layers setup here
 # LAYERS = [120, 'DROPOUT', 84]
-LAYERS = [512, 'DROPOUT', 512, 'DROPOUT', 16]
+LAYERS = [120, 'DROPOUT', 84, 10]
 
 
 def create_base_model():
@@ -80,6 +81,15 @@ def main():
                                histogram_freq=0, write_graph=True,
                                write_images=True)
 
+    print('Original data split: {}'.format(train_features.shape[0]))
+    datagen = ImageDataGenerator(validation_split=0.25)
+    train_generator = datagen.flow(
+        (train_features, train_labels),
+        batch_size=train_features.shape[0],
+        subset='training').next()
+    validation_generator = datagen.flow(train_features, train_labels, batch_size=train_features.shape[0], subset='validation').next()
+
+
     base_model = create_base_model()
     dimensions = get_feat_count(base_model.output_shape)
     print('Base model output shape: {}'.format(base_model.output_shape))
@@ -103,28 +113,15 @@ def main():
                   metrics=METRIC)
     print(model.summary())
 
-    model.fit(
-        train_features, train_labels, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE,
-        callbacks=[tb_call_back], validation_split=0.25)
+    model.fit_generator(
+        train_generator,
+        steps_per_epoch=train_generator.samples // BATCH_SIZE,
+        validation_data=validation_generator,
+        validation_steps=validation_generator.samples // BATCH_SIZE,
+        epochs=NUM_EPOCHS, callbacks=[tb_call_back])
 
-    # model.evaluate_generator
-    #
-    # scores = model.evaluate(train_features, validation_labels, verbose=1,
-    #                         batch_size=BATCH_SIZE)
-    # print("Accuracy: %.2f%%" % (scores[1] * 100))
-    # scores_test = model.evaluate(test_features, test_labels, verbose=1,
-    #                              batch_size=BATCH_SIZE)
-    # print("Accuracy test: %.2f%%" % (scores_test[1] * 100))
+    scores = model.evaluate_generator(validation_generator, verbose=1)
 
-    # model.save("./models/{}_model_score-{}.h5".format(MODEL_NAME, int(
-    #     scores[1] * 100)))
-    # model.save_weights(
-    #     './weights/{}_weights_score-{}.h5'.format(MODEL_NAME,
-    #                                               int(scores[1] * 100)))
-
-    # gnr_data = create_train_data(validation_dir, 'validation')
-    # plot_data(gnr_data, model)
+    print("Accuracy: %.2f%%" % (scores[1] * 100))
 
 
-if __name__ == "__main__":
-    main()
