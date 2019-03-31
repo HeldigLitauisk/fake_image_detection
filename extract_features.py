@@ -65,7 +65,7 @@ def generate_from_dir(train_dir):
         batch_size=BATCH_SIZE,
         class_mode='binary',
         subset='training',
-        seed=1992)
+        shuffle=False)
 
     validation_generator = datagen.flow_from_directory(
         train_dir,
@@ -73,7 +73,7 @@ def generate_from_dir(train_dir):
         batch_size=BATCH_SIZE,
         class_mode='binary',
         subset='validation',
-        seed=1992)
+        shuffle=False)
 
     train_filenames = train_generator.filenames
     test_filenames = validation_generator.filenames

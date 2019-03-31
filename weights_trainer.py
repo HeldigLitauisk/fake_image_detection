@@ -22,8 +22,8 @@ DROPOUT = [0.3, 0.4, 0.5][-1]
 DENSE_LAYER_ACTIVATION = ['softmax', 'sigmoid'][1]
 LOSS = ['binary_crossentropy', 'categorical_crossentropy'][0]
 METRIC = ['acc']
-TRANSFER_LEARNING = [ResNet50, VGG16, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-4]
-NAME = ['ResNet50', 'VGG16', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-4]
+TRANSFER_LEARNING = [ResNet50, VGG16, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-3]
+NAME = ['ResNet50', 'VGG16', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-3]
 # Models and respective images size and preprocessing
 # ['ResNet50', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception']
 # [224, 224, 224, 299, 224, 299, 299]
@@ -32,24 +32,13 @@ PROCESSING = ['caffe', 'tf', 'torch'][1]
 CHANNELS = 3
 INPUT_SHAPE = (IMG_SIZE, IMG_SIZE, CHANNELS)
 NUMBER_OF_CLASSES = 1
-NUM_EPOCHS = 32
+NUM_EPOCHS = 16
 BATCH_SIZE = 32
 MODEL_NAME = 'model_{}_{}_{}_{}_L_{}_B-{}'.format(
     NAME, IMG_SIZE, DENSE_LAYER_ACTIVATION, NUM_EPOCHS, LR, LOSS, BATCH_SIZE)
 # Change FULLY CONNECTED layers setup here
 # LAYERS = [120, 'DROPOUT', 84]
-# LAYERS = [120, 'DROPOUT', 84, 10]
-LAYERS = [1200, 'DROPOUT', 840, 'DROPOUT', 100]
-
-
-class MetricsCallback(keras.callbacks.Callback):
-    def on_epoch_end(self, epoch, logs=None):
-        if epoch:
-            # print(self.validation_data[0])
-            x_test = self.validation_data[0]
-            y_test = self.validation_data[1]
-            prediction = self.model.predict(x_test)
-            print('r2:', r2_score(prediction, y_test).round(2))
+LAYERS = [120, 'DROPOUT', 84, 10]
 
 
 def create_base_model():
@@ -66,56 +55,6 @@ def get_feat_count(output_shape):
     for i in range(1, len(output_shape)):
         count = count * output_shape[i]
     return count
-
-
-def evaluate_validation(model, x_train, y_train, train_dir):
-    scores = model.evaluate(x_train, y_train, verbose=1)
-    print("Accuracy: %.2f%%" % (scores[1] * 100))
-    fnames = validation_generator.filenames
-    # ground_truth = validation_generator.classes
-    # label2index = validation_generator.class_indices
-    validation_features = [x_train[i] for i in label2index]
-    validation_labels = [y_train[i] for i in label2index]
-    print('Validation features count: {}'.format(len(validation_features)))
-    print('Validation labels count: {}'.format(len(validation_labels)))
-    # Getting the mapping from class index to class label
-    idx2label = dict((v, k) for k, v in label2index.items())
-    predictions = model.predict_classes(validation_features)
-    prob = model.predict(validation_features)
-    errors = np.where(predictions != ground_truth)[0]
-    print("No of errors = {}/{}".format(len(errors), validation_generator.samples))
-
-    wrong_fakes, wrong_real = [], []
-    for i in range(0, len(errors)):
-        pred_class = np.argmax(prob[errors[i]])
-        pred_label = idx2label[pred_class]
-        #################################
-        if pred_label == 'fake':
-            wrong_fakes.append(errors[i])
-        elif pred_label == 'real':
-            wrong_real.append(errors[i])
-        ################################
-        if i % 50 == 0:
-            print('Filename: {}, Original label:{}, Prediction:{}, confidence : {:.3f}'.format(
-                fnames[errors[i]].split('/')[-1],
-                fnames[errors[i]].split('/')[0],
-                pred_label,
-                prob[errors[i]][pred_class]))
-            original = load_img('{}/{}'.format(train_dir, fnames[errors[i]]))
-            plt.imshow(original)
-            plt.show()
-    print('Fake % predicted incorrectly: {}%'.format(
-        round(len(wrong_fakes) / len(errors) * 100), 2))
-    print('Real % predicted incorrectly: {}%'.format(
-        round(len(wrong_real) / len(errors) * 100), 2))
-
-    c_matrix = confusion_matrix(validation_labels.argmax(axis=1), predictions)
-    print(c_matrix)
-
-    model.save("./models/{}_model_score-{}.h5".format(
-        MODEL_NAME, int(scores[1] * 100)))
-    model.save_weights('./weights/{}_weights_score-{}.h5'.format(
-        MODEL_NAME, int(scores[1] * 100)))
 
 
 def reshape_data(x_train, base_model):
@@ -173,6 +112,25 @@ def main():
     print('x_train shape: {}'.format(x_train.shape))
     print('y_train shape: {}'.format(y_train.shape))
 
+    a = np.array(x_train)
+    b = np.array(y_train)
+    c = np.array(train_filenames)
+    if len(x_train) != len(y_train) or len(x_train) != len(train_filenames):
+        raise Exception('Loser, you made a mistake somewhere!')
+
+    indices = np.arange(a.shape[0])
+    print('indices: {}'.format(indices))
+    np.random.seed(1993)
+    np.random.shuffle(indices)
+    print('indices: {}'.format(indices))
+
+    x_train = a[indices]
+    y_train = b[indices]
+    train_filenames = c[indices]
+
+    for i in range(0, 25):
+        print('{} - {}'.format(train_filenames[i], y_train[i]))
+
     model = Sequential()
     # ------------------- FC --------------------- #
     if len(LAYERS):
@@ -193,7 +151,8 @@ def main():
 
     history = model.fit(
         x_train, y_train, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE,
-        callbacks=[tb_call_back, MetricsCallback()], validation_split=0.25, shuffle=False)
+        callbacks=[tb_call_back], validation_split=0.25,
+        shuffle=False)
 
     x_validation = history.validation_data[0]
     y_validation = history.validation_data[1]
