@@ -9,29 +9,21 @@ ssl._create_default_https_context = ssl._create_unverified_context
 
 IMG_SIZE = [224, 299, 600, 8, 96, 255, 150][0]
 POOLING = ['avg', 'max', None][0]
-TRANSFER_LEARNING = [ResNet50, VGG16, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][1]
-NAME = ['ResNet50', 'VGG16', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][1]
+TRANSFER_LEARNING = [ResNet50, VGG16, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-4]
+NAME = ['ResNet50', 'VGG16', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-4]
 # Models and respective images size and preprocessing
 # ['ResNet50', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception']
 # [224, 224, 224, 299, 224, 299, 299]
 # [caffe, caffe, caffe,tf, tf, tf, tf]
-PROCESSING = ['caffe', 'tf', 'torch'][0]
+PROCESSING = ['caffe', 'tf', 'torch'][1]
 CHANNELS = 3
 INPUT_SHAPE = (IMG_SIZE, IMG_SIZE, CHANNELS)
 BATCH_SIZE = 32
 
 
-def extract_features(train_dir):
+def extract_features(generator):
     pretrained_model = TRANSFER_LEARNING(
         weights='imagenet', include_top=False, input_shape=INPUT_SHAPE)
-
-    datagen = ImageDataGenerator()
-    generator = datagen.flow_from_directory(
-        train_dir,
-        target_size=(IMG_SIZE, IMG_SIZE),
-        batch_size=BATCH_SIZE,
-        class_mode='binary')
-
     sample_count = generator.samples
     print('Sample count: {}'.format(sample_count))
     features = np.zeros(shape=(sample_count, pretrained_model.output_shape[1] *
@@ -64,6 +56,36 @@ def extract_features(train_dir):
     return features, labels
 
 
+def generate_from_dir(train_dir):
+
+    datagen = ImageDataGenerator(validation_split=0.2)
+    train_generator = datagen.flow_from_directory(
+        train_dir,
+        target_size=(IMG_SIZE, IMG_SIZE),
+        batch_size=BATCH_SIZE,
+        class_mode='binary',
+        subset='training')
+
+    validation_generator = datagen.flow_from_directory(
+        train_dir,
+        target_size=(IMG_SIZE, IMG_SIZE),
+        batch_size=BATCH_SIZE,
+        class_mode='binary',
+        subset='validation')
+
+    train_filenames = train_generator.filenames
+    test_filenames = validation_generator.filenames
+
+
+    print(validation_generator.samples)
+    print(train_generator.samples)
+
+    x_train, y_train = extract_features(train_generator)
+    x_test, y_test = extract_features(validation_generator)
+
+    return x_train, y_train, x_test, y_test, train_filenames, test_filenames
+
+
 def main():
     parser = ArgumentParser(__doc__)
     parser.add_argument("--train_data", required=False,
@@ -84,10 +106,11 @@ def main():
         NAME, IMG_SIZE, PROCESSING, train_sample_count)
     if not os.path.exists(features_file):
         print('Creating features for first time')
-        train_features, train_labels = extract_features(
-            train_dir)
-        np.savez(features_file, train_features=train_features,
-                 train_labels=train_labels)
+        x_train, y_train, x_test, y_test, train_filenames, test_filenames =\
+            generate_from_dir(train_dir)
+        np.savez(features_file, x_train=x_train, y_train=y_train,
+                 x_test=x_test, y_test=y_test, train_filenames=train_filenames,
+                 test_filenames=test_filenames)
     else:
         print('Features file already exist: {}'.format(features_file))
 
