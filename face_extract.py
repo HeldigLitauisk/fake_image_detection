@@ -2,12 +2,11 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.patches as patches
-
+from random import randint
+from tqdm import tqdm
 from face_align.align import AlignDlib
 
-# %matplotlib inline
-
-IMG_SIZE = 225
+IMG_SIZE = 300
 from image_loader import load_metadata
 
 metadata = load_metadata('data/training/')
@@ -18,50 +17,22 @@ def load_image(path):
     # in BGR order. So we need to reverse them
     return img[..., ::-1]
 
-# Initialize the OpenFace face alignment utility
 alignment = AlignDlib('models/landmarks.dat')
 
-for pic in metadata:
-    # if '/real/' in pic.image_path():
-    #     continue
-    # Load an image of Jacques Chirac
-    pic_orig = load_image(pic.image_path())
-    # jc_orig = load_image('data/training/fake/easy_87_0110.jpg')
-    # Detect face and return bounding box
-    bb = alignment.getLargestFaceBoundingBox(pic_orig)
-
-
-
-    # Transform image using specified face landmark indices and crop image to 96x96 INNER_EYES_AND_BOTTOM_LIP # OUTER_EYES_AND_NOSE
-
+for pic in tqdm(metadata):
     try:
-        jc_aligned = alignment.align(IMG_SIZE, pic_orig, bb, landmarkIndices=AlignDlib.OUTER_EYES_AND_NOSE)
-        new_path = pic.image_path().replace('/fake/', '/gnr_fake/').replace('/real/', '/gnr_real/')
-        plt.imsave(new_path, jc_aligned)
-        if '/fake/' in pic.image_path():
-            flipped_im = np.fliplr(plt.imread(new_path))
-            plt.imsave(new_path.replace('.jpg', '_flipped.jpg').replace('.png', '_flipped.png'), flipped_im)
+        if not pic.image_path().endswith('.png'):
+            continue
+
+        pic_orig = load_image(pic.image_path())
+        bb = alignment.getLargestFaceBoundingBox(pic_orig)
+
+        aligned = alignment.align(IMG_SIZE, pic_orig, bb, landmarkIndices=AlignDlib.OUTER_EYES_AND_NOSE)
+        pic_id = randint(0, 1000000)
+        new_path = pic.image_path().replace('/fake/', '/gnr_fake/{}_fake_'.format(pic_id)).replace('/real/', '/gnr_real/{}_real_'.format(pic_id))
+        plt.imsave(new_path, aligned)
+        # if '/fake/' in pic.image_path():
+        #     flipped_im = np.fliplr(plt.imread(new_path))
+        #     plt.imsave(new_path.replace('.jpg', '_flipped.jpg').replace('.png', '_flipped.png'), flipped_im)
     except Exception:
-        plt.imsave(pic.image_path().replace('/fake/', '/gnr_failed_fake/').replace('/real/', '/gnr_failed_real/'), pic_orig)
-        # try:
-        #     jc_aligned = alignment.align(IMG_SIZE, pic_orig, bb, landmarkIndices=AlignDlib.INNER_EYES_AND_BOTTOM_LIP)
-        #     plt.imsave(pic.image_path().replace('/fake/', '/gnr_fake/BOTTOM_LIP_').replace('/real/', '/gnr_real/BOTTOM_LIP_'), jc_aligned)
-        # except AttributeError:
-        #     pass
-        # plt.subplot(132)
-        # plt.imshow(pic_orig)
-        # plt.show()
-# Show original image
-# plt.subplot(131)
-# plt.imshow(jc_orig)
-#
-# # Show original image with bounding box
-# plt.subplot(132)
-# plt.imshow(jc_orig)
-# plt.gca().add_patch(patches.Rectangle((bb.left(), bb.top()), bb.width(), bb.height(), fill=False, color='red'))
-#
-# # Show aligned image
-# plt.subplot(133)
-# plt.imshow(jc_aligned)
-#
-# plt.show()
+        print('Failed: {}'.format(pic.image_path()))

@@ -5,6 +5,8 @@ from keras.applications import ResNet50, VGG19, VGG16, InceptionV3, MobileNetV2,
 from keras.applications.imagenet_utils import preprocess_input
 import numpy as np
 from keras.preprocessing.image import ImageDataGenerator
+from tqdm import tqdm
+
 ssl._create_default_https_context = ssl._create_unverified_context
 
 IMG_SIZE = [224, 299, 600, 8, 96, 255, 150][0]
@@ -32,7 +34,7 @@ def extract_features(generator):
     labels = np.zeros(shape=(sample_count))
 
     i = 0
-    for inputs_batch, labels_batch in generator:
+    for inputs_batch, labels_batch in tqdm(generator):
         features_batch = pretrained_model.predict(
             preprocess_input(inputs_batch, mode=PROCESSING))
         op_shape = features_batch.shape
@@ -41,9 +43,6 @@ def extract_features(generator):
             inputs_batch.shape[0], op_shape[-3] * op_shape[-2] * op_shape[-1]))
 
         features[i * BATCH_SIZE: (i + 1) * BATCH_SIZE] = features_batch
-        if i % 10 == 0:
-            print("Extracting features: {} out of {}".format(
-                BATCH_SIZE * i, sample_count))
         labels[i * BATCH_SIZE: (i + 1) * BATCH_SIZE] = labels_batch
         i += 1
         if i * BATCH_SIZE >= sample_count:
@@ -92,10 +91,15 @@ def main():
     parser = ArgumentParser(__doc__)
     parser.add_argument("--train_data", required=False,
                         help="directory for features extraction")
+    parser.add_argument("--gan_data", required=False,
+                        help="False if use splicing dataset")
 
     args = parser.parse_args()
 
-    train_dir = os.path.relpath('./data/training')
+    if not args.gan_data:
+        train_dir = os.path.relpath('./data_gan/')
+    else:
+        train_dir = os.path.relpath('./data_photoshop/')
 
     if args.train_data:
         train_dir = args.train_data

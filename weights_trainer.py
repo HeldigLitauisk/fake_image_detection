@@ -32,13 +32,13 @@ PROCESSING = ['caffe', 'tf', 'torch'][1]
 CHANNELS = 3
 INPUT_SHAPE = (IMG_SIZE, IMG_SIZE, CHANNELS)
 NUMBER_OF_CLASSES = 1
-NUM_EPOCHS = 16
-BATCH_SIZE = 32
+NUM_EPOCHS = 20
+BATCH_SIZE = 16
 MODEL_NAME = 'model_{}_{}_{}_{}_L_{}_B-{}'.format(
     NAME, IMG_SIZE, DENSE_LAYER_ACTIVATION, NUM_EPOCHS, LR, LOSS, BATCH_SIZE)
 # Change FULLY CONNECTED layers setup here
 # LAYERS = [120, 'DROPOUT', 84]
-LAYERS = [120, 'DROPOUT', 84, 10]
+LAYERS = [10]
 
 
 def create_base_model():
@@ -66,6 +66,39 @@ def reshape_data(x_train, base_model):
     return x_train
 
 
+def get_indices(x_train):
+    a = np.array(x_train)
+    indices = np.arange(a.shape[0])
+    print('indices: {}'.format(indices))
+    np.random.seed(1993)
+    np.random.shuffle(indices)
+    print('indices: {}'.format(indices))
+    return indices
+
+
+def shuffle_array(np_array, indices):
+    return np.array(np_array)[indices]
+
+
+def load_features(features_file, train_data=True):
+    if os.path.exists(features_file):
+        bottleneck_features = np.load(features_file)
+        if train_data:
+            x_train = bottleneck_features['x_train']
+            y_train = bottleneck_features['y_train']
+            train_filenames = bottleneck_features['train_filenames']
+            print('Loaded {} features from disk'.format(features_file))
+            return x_train, y_train, train_filenames
+        else:
+            x_test = bottleneck_features['x_test']
+            y_test = bottleneck_features['y_test']
+            test_filenames = bottleneck_features['test_filenames']
+            print('Loaded {} features from disk'.format(features_file))
+            return x_test, y_test, test_filenames
+    else:
+        raise Exception('Extracted Features could not be found: {}'.format(
+            features_file))
+
 def main():
     parser = ArgumentParser(__doc__)
     parser.add_argument("--train_data", required=False,
@@ -85,18 +118,9 @@ def main():
 
     features_file = './features/{}_features_IMG-{}_Pre-{}_SAMPLE-{}.npz'.format(
         NAME, IMG_SIZE, PROCESSING, train_sample_count)
-    if os.path.exists(features_file):
-        bottleneck_features = np.load(features_file)
-        x_train = bottleneck_features['x_train']
-        x_test = bottleneck_features['x_test']
-        y_train = bottleneck_features['y_train']
-        y_test = bottleneck_features['y_test']
-        train_filenames = bottleneck_features['train_filenames']
-        test_filenames = bottleneck_features['test_filenames']
-        print('Loaded {} features from disk'.format(features_file))
-    else:
-        raise Exception('Extracted Features could not be found: {}'.format(
-            features_file))
+
+    x_train, y_train, train_filenames = load_features(features_file)
+    # x_test, y_test, test_filenames = load_features(features_file, train_data=False)
 
     tb_call_back = TensorBoard(log_dir='./graphs/{}/'.format(MODEL_NAME),
                                histogram_freq=0, write_graph=True,
@@ -112,24 +136,13 @@ def main():
     print('x_train shape: {}'.format(x_train.shape))
     print('y_train shape: {}'.format(y_train.shape))
 
-    a = np.array(x_train)
-    b = np.array(y_train)
-    c = np.array(train_filenames)
     if len(x_train) != len(y_train) or len(x_train) != len(train_filenames):
         raise Exception('Loser, you made a mistake somewhere!')
 
-    indices = np.arange(a.shape[0])
-    print('indices: {}'.format(indices))
-    np.random.seed(1993)
-    np.random.shuffle(indices)
-    print('indices: {}'.format(indices))
-
-    x_train = a[indices]
-    y_train = b[indices]
-    train_filenames = c[indices]
-
-    for i in range(0, 25):
-        print('{} - {}'.format(train_filenames[i], y_train[i]))
+    indices = get_indices(x_train)
+    x_train = shuffle_array(x_train, indices)
+    y_train = shuffle_array(y_train, indices)
+    train_filenames = shuffle_array(train_filenames, indices)
 
     model = Sequential()
     # ------------------- FC --------------------- #
@@ -209,12 +222,14 @@ def main():
     print('Real % predicted incorrectly: {}%'.format(
         round(wrong_real / len(misclassified) * 100), 2))
 
-    c_matrix = confusion_matrix(np.round(y_validation, 0), np.round(predictions, 0))
+    model.save(os.path.relpath("./models/{}_model_score-{}.h5".format(
+        MODEL_NAME, int(scores[1] * 100))))
+    model.save_weights(os.path.relpath('./weights/{}_weights_score-{}.h5'.format(
+        MODEL_NAME, int(scores[1] * 100))))
+
+    c_matrix = confusion_matrix(y_true=np.round(y_validation, 0),
+                                y_pred=np.round(predictions, 0))
     print(c_matrix)
-    model.save("./models/{}_model_score-{}.h5".format(
-        MODEL_NAME, int(scores[1] * 100)))
-    model.save_weights('./weights/{}_weights_score-{}.h5'.format(
-        MODEL_NAME, int(scores[1] * 100)))
 
 
 if __name__ == "__main__":
