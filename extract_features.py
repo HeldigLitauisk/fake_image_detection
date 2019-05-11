@@ -1,31 +1,32 @@
 import os
 import ssl
 from argparse import ArgumentParser
-from keras.applications import ResNet50, VGG19, VGG16, InceptionV3, MobileNetV2, InceptionResNetV2, Xception
+from keras.applications import ResNet50, VGG19, VGG16, InceptionV3, MobileNetV2, InceptionResNetV2, Xception, NASNetLarge, MobileNet, DenseNet201, NASNetMobile
 from keras.applications.imagenet_utils import preprocess_input
 import numpy as np
 from keras.preprocessing.image import ImageDataGenerator
 from tqdm import tqdm
 
 ssl._create_default_https_context = ssl._create_unverified_context
-
-IMG_SIZE = [224, 299, 600, 8, 96, 255, 150][0]
-POOLING = ['avg', 'max', None][0]
-TRANSFER_LEARNING = [ResNet50, VGG16, VGG19, InceptionV3, MobileNetV2, InceptionResNetV2, Xception][-3]
-NAME = ['ResNet50', 'VGG16', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception'][-3]
-# Models and respective images size and preprocessing
-# ['ResNet50', 'VGG19', 'InceptionV3', 'MobileNetV2', 'InceptionResNetV2', 'Xception']
-# [224, 224, 224, 299, 224, 299, 299]
-# [caffe, caffe, caffe,tf, tf, tf, tf]
-PROCESSING = ['caffe', 'tf', 'torch'][1]
-CHANNELS = 3
-INPUT_SHAPE = (IMG_SIZE, IMG_SIZE, CHANNELS)
 BATCH_SIZE = 32
 
+MODELS = {
+    'DenseNet201': {'IMG_SIZE': 224, 'PROCESSING': 'torch', 'TRANSFER_LEARNING': DenseNet201},
+    'MobileNetV2': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': MobileNetV2},
+    'VGG19': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': VGG19},
+    'NASNetMobile': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': NASNetMobile},
+    'InceptionResNetV2': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionResNetV2},
+    'InceptionV3': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionV3},
+    'ResNet50': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': ResNet50},
+    'Xception': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': Xception},
+}
 
-def extract_features(generator):
-    pretrained_model = TRANSFER_LEARNING(
-        weights='imagenet', include_top=False, input_shape=INPUT_SHAPE)
+
+def extract_features(generator, model):
+    input_shape = (model['IMG_SIZE'], model['IMG_SIZE'], 3)
+    pretrained_model = model['TRANSFER_LEARNING'](
+        weights='imagenet', include_top=False, input_shape=input_shape)
+    # Due to horizontal flipping we have 2x samples
     sample_count = generator.samples
     print('Sample count: {}'.format(sample_count))
     features = np.zeros(shape=(sample_count, pretrained_model.output_shape[1] *
@@ -36,7 +37,7 @@ def extract_features(generator):
     i = 0
     for inputs_batch, labels_batch in tqdm(generator):
         features_batch = pretrained_model.predict(
-            preprocess_input(inputs_batch, mode=PROCESSING))
+            preprocess_input(inputs_batch, mode=model['PROCESSING']))
         op_shape = features_batch.shape
 
         features_batch = np.reshape(features_batch, (
@@ -55,70 +56,55 @@ def extract_features(generator):
     return features, labels
 
 
-def generate_from_dir(train_dir):
+def save_features(train_data):
+    for model_key, model_values in MODELS.items():
+        data_type = train_data.split('_')[-1].split('/')[0]
+        training_file = './features/{}_{}_training_features_10k.npz'.format(
+            model_key, data_type)
+        validation_file = training_file.replace('training', 'validation')
+        if not os.path.exists(training_file):
+            print('Creating features file for the first time: {}'.format(training_file))
+            x_train, y_train, train_filenames = generate_from_dir(train_data, model_values)
+            x_valid, y_valid, validation_filenames = generate_from_dir(train_data.replace('training', 'validation'), model_values)
+            np.savez(training_file, x_train=x_train, y_train=y_train, train_filenames=train_filenames)
+            np.savez(validation_file, x_valid=x_valid, y_valid=y_valid, validation_filenames=validation_filenames)
+            break
+        else:
+            print('Features file already exist: {}'.format(training_file))
 
-    datagen = ImageDataGenerator(validation_split=0.2)
+
+def generate_from_dir(train_dir, model):
+    datagen = ImageDataGenerator()
     train_generator = datagen.flow_from_directory(
         train_dir,
-        target_size=(IMG_SIZE, IMG_SIZE),
+        target_size=(model['IMG_SIZE'], model['IMG_SIZE']),
         batch_size=BATCH_SIZE,
         class_mode='binary',
-        subset='training',
-        shuffle=False)
-
-    validation_generator = datagen.flow_from_directory(
-        train_dir,
-        target_size=(IMG_SIZE, IMG_SIZE),
-        batch_size=BATCH_SIZE,
-        class_mode='binary',
-        subset='validation',
         shuffle=False)
 
     train_filenames = train_generator.filenames
-    test_filenames = validation_generator.filenames
-
-
-    print(validation_generator.samples)
     print(train_generator.samples)
 
-    x_train, y_train = extract_features(train_generator)
-    x_test, y_test = extract_features(validation_generator)
-
-    return x_train, y_train, x_test, y_test, train_filenames, test_filenames
+    x_train, y_train = extract_features(train_generator, model)
+    return x_train, y_train, train_filenames
 
 
 def main():
     parser = ArgumentParser(__doc__)
     parser.add_argument("--train_data", required=False,
                         help="directory for features extraction")
-    parser.add_argument("--gan_data", required=False,
-                        help="False if use splicing dataset")
-
     args = parser.parse_args()
-
-    if not args.gan_data:
-        train_dir = os.path.relpath('./data_gan/')
-    else:
-        train_dir = os.path.relpath('./data_photoshop/')
-
+    train_data = os.path.relpath('./data/data_combined/training/')
     if args.train_data:
-        train_dir = args.train_data
+        train_data = args.train_data
 
-    real_count = len(os.listdir(os.path.join(train_dir, 'gnr_real')))
-    fake_count = len(os.listdir(os.path.join(train_dir, 'gnr_fake')))
+    real_count = len(os.listdir(os.path.join(train_data, 'gnr_real')))
+    fake_count = len(os.listdir(os.path.join(train_data, 'gnr_fake')))
     train_sample_count = real_count + fake_count
+    print('Data sample count: {}'.format(train_sample_count))
 
-    features_file = './features/{}_features_IMG-{}_Pre-{}_SAMPLE-{}.npz'.format(
-        NAME, IMG_SIZE, PROCESSING, train_sample_count)
-    if not os.path.exists(features_file):
-        print('Creating features for first time')
-        x_train, y_train, x_test, y_test, train_filenames, test_filenames =\
-            generate_from_dir(train_dir)
-        np.savez(features_file, x_train=x_train, y_train=y_train,
-                 x_test=x_test, y_test=y_test, train_filenames=train_filenames,
-                 test_filenames=test_filenames)
-    else:
-        print('Features file already exist: {}'.format(features_file))
+    for i in range(0, len(MODELS)):
+        save_features(train_data)
 
 
 if __name__ == "__main__":

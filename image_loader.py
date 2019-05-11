@@ -20,6 +20,8 @@ class IdentityMetadata():
 def load_metadata(path):
     metadata = []
     for i in os.listdir(path):
+        if '.DS_Store' in i:
+            continue
         for f in os.listdir(os.path.join(path, i)):
             # Check file extension. Allow only jpg/jpeg' files.
             ext = os.path.splitext(f)[1]
