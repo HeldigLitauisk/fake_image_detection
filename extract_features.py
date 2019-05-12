@@ -4,12 +4,19 @@ from argparse import ArgumentParser
 from keras.applications import ResNet50, VGG19, VGG16, InceptionV3, MobileNetV2, InceptionResNetV2, Xception, NASNetLarge, MobileNet, DenseNet201, NASNetMobile
 from keras.applications.imagenet_utils import preprocess_input
 import numpy as np
+from keras.layers import Dense
+from keras.optimizers import SGD, Adam, RMSprop
 from keras.preprocessing.image import ImageDataGenerator
 from tqdm import tqdm
 
-ssl._create_default_https_context = ssl._create_unverified_context
-BATCH_SIZE = 32
-
+LR = [1e-3, 0.01, 2e-5, 2e-4, 1e-4, 5e-4, 146e-5][2]
+SGD2 = SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
+# CHANGE HERE
+OPTIMIZER = [Adam, SGD, RMSprop][0]
+DROPOUT = [0.3, 0.4, 0.5, 0.2][0]
+DENSE_LAYER_ACTIVATION = ['softmax', 'sigmoid'][1]
+LOSS = ['binary_crossentropy', 'categorical_crossentropy'][0]
+METRIC = ['acc']
 MODELS = {
     'DenseNet201': {'IMG_SIZE': 224, 'PROCESSING': 'torch', 'TRANSFER_LEARNING': DenseNet201},
     'MobileNetV2': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': MobileNetV2},
@@ -20,54 +27,54 @@ MODELS = {
     'ResNet50': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': ResNet50},
     'Xception': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': Xception},
 }
+CHANNELS = 3
+NUMBER_OF_CLASSES = 1
+NUM_EPOCHS = 50
+BATCH_SIZE = 16
+# Change FULLY CONNECTED layers setup here
+# LAYERS = [10, 'DROPOUT', 10, 'DROPOUT', 10]
+LAYERS = [10]
+ssl._create_default_https_context = ssl._create_unverified_context
 
 
-def extract_features(generator, model):
+def train_model(train_generator, val_generator, model):
     input_shape = (model['IMG_SIZE'], model['IMG_SIZE'], 3)
-    pretrained_model = model['TRANSFER_LEARNING'](
-        weights='imagenet', include_top=False, input_shape=input_shape)
+    model = model['TRANSFER_LEARNING'](
+        weights=None, include_top=True, input_shape=input_shape, classes=1)
     # Due to horizontal flipping we have 2x samples
-    sample_count = generator.samples
-    print('Sample count: {}'.format(sample_count))
-    features = np.zeros(shape=(sample_count, pretrained_model.output_shape[1] *
-                               pretrained_model.output_shape[2] *
-                               pretrained_model.output_shape[3]))
-    labels = np.zeros(shape=(sample_count))
+    train_count = train_generator.samples
+    valid_count = val_generator.samples
+    print('Train sample count: {}'.format(train_count))
+    print('Val Sample count: {}'.format(valid_count))
 
-    i = 0
-    for inputs_batch, labels_batch in tqdm(generator):
-        features_batch = pretrained_model.predict(
-            preprocess_input(inputs_batch, mode=model['PROCESSING']))
-        op_shape = features_batch.shape
+    model.compile(optimizer=OPTIMIZER(lr=LR),
+                  # model.compile(optimizer=SGD2,
+                  loss=LOSS,
+                  metrics=METRIC)
+    print(model.summary())
 
-        features_batch = np.reshape(features_batch, (
-            inputs_batch.shape[0], op_shape[-3] * op_shape[-2] * op_shape[-1]))
+    # model.fit_generator(train_generator,
+    #                     steps_per_epoch=steps,
+    #                     epochs=10,
+    #                     validation_data=validation_generator,
+    #                     validation_steps=num_val_samples / batch_size)
 
-        features[i * BATCH_SIZE: (i + 1) * BATCH_SIZE] = features_batch
-        labels[i * BATCH_SIZE: (i + 1) * BATCH_SIZE] = labels_batch
-        i += 1
-        if i * BATCH_SIZE >= sample_count:
-            break
+    model.fit_generator(
+        train_generator, steps_per_epoch=train_count / BATCH_SIZE,
+        epochs=NUM_EPOCHS, validation_data=val_generator,
+        validation_steps=valid_count / BATCH_SIZE)#, callbacks=[tb_call_back])
 
-        features = np.reshape(features, (
-            sample_count, pretrained_model.output_shape[1] *
-            pretrained_model.output_shape[2] *
-            pretrained_model.output_shape[3]))
-    return features, labels
+    return model
 
 
 def save_features(train_data):
     for model_key, model_values in MODELS.items():
-        data_type = train_data.split('_')[-1].split('/')[0]
-        training_file = './features/{}_{}_training_features_10k.npz'.format(
-            model_key, data_type)
-        validation_file = training_file.replace('training', 'validation')
+        training_file = "./models/{}_model.h5".format(model_key)
         if not os.path.exists(training_file):
             print('Creating features file for the first time: {}'.format(training_file))
-            x_train, y_train, train_filenames = generate_from_dir(train_data, model_values)
-            x_valid, y_valid, validation_filenames = generate_from_dir(train_data.replace('training', 'validation'), model_values)
-            np.savez(training_file, x_train=x_train, y_train=y_train, train_filenames=train_filenames)
-            np.savez(validation_file, x_valid=x_valid, y_valid=y_valid, validation_filenames=validation_filenames)
+            model = generate_from_dir(train_data, model_values)
+            model.save(os.path.relpath("./models/{}_model.h5".format(model_key)))
+            model.save_weights(os.path.relpath('./weights/{}_weights.h5'.format(model_key)))
             break
         else:
             print('Features file already exist: {}'.format(training_file))
@@ -82,11 +89,22 @@ def generate_from_dir(train_dir, model):
         class_mode='binary',
         shuffle=False)
 
+    validation_dir = train_dir.replace('training', 'validation')
+    print(train_dir)
+    print(validation_dir)
+
+    validation_generator = datagen.flow_from_directory(
+        validation_dir,
+        target_size=(model['IMG_SIZE'], model['IMG_SIZE']),
+        batch_size=BATCH_SIZE,
+        class_mode='binary',
+        shuffle=False)
+
     train_filenames = train_generator.filenames
     print(train_generator.samples)
 
-    x_train, y_train = extract_features(train_generator, model)
-    return x_train, y_train, train_filenames
+    new_model = train_model(train_generator, validation_generator, model)
+    return new_model
 
 
 def main():
@@ -94,7 +112,7 @@ def main():
     parser.add_argument("--train_data", required=False,
                         help="directory for features extraction")
     args = parser.parse_args()
-    train_data = os.path.relpath('./data/data_combined/training/')
+    train_data = os.path.relpath('./data/data_photoshop/training/')
     if args.train_data:
         train_data = args.train_data
 
