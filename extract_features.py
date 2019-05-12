@@ -9,13 +9,13 @@ from keras.optimizers import SGD, Adam, RMSprop
 from keras.preprocessing.image import ImageDataGenerator
 from tqdm import tqdm
 
-LR = [1e-3, 0.01, 2e-5, 2e-4, 1e-4, 5e-4, 146e-5][2]
+LR = [1e-3, 0.01, 2e-5, 2e-4, 1e-4, 5e-4, 146e-5][0]
 SGD2 = SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
 # CHANGE HERE
 OPTIMIZER = [Adam, SGD, RMSprop][0]
 DROPOUT = [0.3, 0.4, 0.5, 0.2][0]
 DENSE_LAYER_ACTIVATION = ['softmax', 'sigmoid'][1]
-LOSS = ['binary_crossentropy', 'categorical_crossentropy'][0]
+LOSS = ['binary_crossentropy', 'categorical_crossentropy'][1]
 METRIC = ['acc']
 MODELS = {
     'DenseNet201': {'IMG_SIZE': 224, 'PROCESSING': 'torch', 'TRANSFER_LEARNING': DenseNet201},
@@ -29,8 +29,8 @@ MODELS = {
 }
 CHANNELS = 3
 NUMBER_OF_CLASSES = 1
-NUM_EPOCHS = 50
-BATCH_SIZE = 16
+NUM_EPOCHS = 20
+BATCH_SIZE = 32
 # Change FULLY CONNECTED layers setup here
 # LAYERS = [10, 'DROPOUT', 10, 'DROPOUT', 10]
 LAYERS = [10]
@@ -40,7 +40,7 @@ ssl._create_default_https_context = ssl._create_unverified_context
 def train_model(train_generator, val_generator, model):
     input_shape = (model['IMG_SIZE'], model['IMG_SIZE'], 3)
     model = model['TRANSFER_LEARNING'](
-        weights=None, include_top=True, input_shape=input_shape, classes=1)
+        weights=None, include_top=True, input_shape=input_shape, classes=2)
     # Due to horizontal flipping we have 2x samples
     train_count = train_generator.samples
     valid_count = val_generator.samples
@@ -62,7 +62,8 @@ def train_model(train_generator, val_generator, model):
     model.fit_generator(
         train_generator, steps_per_epoch=train_count / BATCH_SIZE,
         epochs=NUM_EPOCHS, validation_data=val_generator,
-        validation_steps=valid_count / BATCH_SIZE)#, callbacks=[tb_call_back])
+        validation_steps=valid_count / BATCH_SIZE,
+        use_multiprocessing=True)#, callbacks=[tb_call_back])
 
     return model
 
@@ -86,7 +87,7 @@ def generate_from_dir(train_dir, model):
         train_dir,
         target_size=(model['IMG_SIZE'], model['IMG_SIZE']),
         batch_size=BATCH_SIZE,
-        class_mode='binary',
+        class_mode='categorical',
         shuffle=False)
 
     validation_dir = train_dir.replace('training', 'validation')
@@ -97,7 +98,7 @@ def generate_from_dir(train_dir, model):
         validation_dir,
         target_size=(model['IMG_SIZE'], model['IMG_SIZE']),
         batch_size=BATCH_SIZE,
-        class_mode='binary',
+        class_mode='categorical',
         shuffle=False)
 
     train_filenames = train_generator.filenames
