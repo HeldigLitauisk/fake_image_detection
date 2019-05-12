@@ -9,12 +9,10 @@ from keras.optimizers import SGD, Adam, RMSprop
 from keras.preprocessing.image import ImageDataGenerator
 from tqdm import tqdm
 
-LR = [1e-3, 0.01, 2e-5, 2e-4, 1e-4, 5e-4, 146e-5][0]
+LR = [1e-3, 0.01, 2e-5, 2e-4, 1e-4, 5e-4, 146e-5][2]
 SGD2 = SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
 # CHANGE HERE
 OPTIMIZER = [Adam, SGD, RMSprop][0]
-DROPOUT = [0.3, 0.4, 0.5, 0.2][0]
-DENSE_LAYER_ACTIVATION = ['softmax', 'sigmoid'][1]
 LOSS = ['binary_crossentropy', 'categorical_crossentropy'][1]
 METRIC = ['acc']
 MODELS = {
@@ -27,13 +25,8 @@ MODELS = {
     'ResNet50': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': ResNet50},
     'Xception': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': Xception},
 }
-CHANNELS = 3
-NUMBER_OF_CLASSES = 1
 NUM_EPOCHS = 20
-BATCH_SIZE = 32
-# Change FULLY CONNECTED layers setup here
-# LAYERS = [10, 'DROPOUT', 10, 'DROPOUT', 10]
-LAYERS = [10]
+BATCH_SIZE = 16
 ssl._create_default_https_context = ssl._create_unverified_context
 
 
@@ -64,7 +57,7 @@ def train_model(train_generator, val_generator, model):
         epochs=NUM_EPOCHS, validation_data=val_generator,
         validation_steps=valid_count / BATCH_SIZE,
         use_multiprocessing=True)#, callbacks=[tb_call_back])
-
+    print('saving!!!')
     return model
 
 
@@ -76,6 +69,7 @@ def save_features(train_data):
             model = generate_from_dir(train_data, model_values)
             model.save(os.path.relpath("./models/{}_model.h5".format(model_key)))
             model.save_weights(os.path.relpath('./weights/{}_weights.h5'.format(model_key)))
+            print('saved: {}'.format(model_key))
             break
         else:
             print('Features file already exist: {}'.format(training_file))
