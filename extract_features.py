@@ -1,10 +1,13 @@
 import os
 import ssl
 from argparse import ArgumentParser
+
+from keras import Input, Model
 from keras.applications import ResNet50, VGG19, VGG16, InceptionV3, MobileNetV2, InceptionResNetV2, Xception, NASNetLarge, MobileNet, DenseNet201, NASNetMobile
 from keras.applications.imagenet_utils import preprocess_input
 import numpy as np
-from keras.layers import Dense
+from keras.callbacks import TensorBoard
+from keras.layers import Dense, Dropout, Flatten
 from keras.optimizers import SGD, Adam, RMSprop
 from keras.preprocessing.image import ImageDataGenerator
 from tqdm import tqdm
@@ -27,24 +30,44 @@ MODELS = {
 }
 NUM_EPOCHS = 20
 BATCH_SIZE = 16
+DROPOUT = [0.3, 0.4, 0.5, 0.2][0]
+DENSE_LAYER_ACTIVATION = ['softmax', 'sigmoid'][0]
+NUMBER_OF_CLASSES = 2
 ssl._create_default_https_context = ssl._create_unverified_context
 
 
 def train_model(train_generator, val_generator, model):
     input_shape = (model['IMG_SIZE'], model['IMG_SIZE'], 3)
-    model = model['TRANSFER_LEARNING'](
-        weights=None, include_top=True, input_shape=input_shape, classes=2)
-    # Due to horizontal flipping we have 2x samples
+
+    input_tensor = Input(shape=input_shape)
+    base_model = model['TRANSFER_LEARNING'](
+        include_top=False,
+        weights='imagenet',
+        input_tensor=input_tensor)
+
+    for layer in base_model.layers:
+        layer.trainable = True
+
+    op = Dense(256, activation='relu')(base_model.output)
+    op = Dropout(DROPOUT)(op)
+    op = Dense(84, activation='relu')(op)
+    op = Dropout(DROPOUT)(op)
+    op = Dense(10, activation='relu')(op)
+    op = Dropout(DROPOUT)(op)
+    op = Flatten()(op)
+    output_tensor = Dense(NUMBER_OF_CLASSES,
+                          activation=DENSE_LAYER_ACTIVATION)(op)
+    new_model = Model(inputs=input_tensor, outputs=output_tensor)
+
     train_count = train_generator.samples
     valid_count = val_generator.samples
     print('Train sample count: {}'.format(train_count))
     print('Val Sample count: {}'.format(valid_count))
 
-    model.compile(optimizer=OPTIMIZER(lr=LR),
-                  # model.compile(optimizer=SGD2,
+    new_model.compile(optimizer=OPTIMIZER(lr=LR),
                   loss=LOSS,
                   metrics=METRIC)
-    print(model.summary())
+    print(new_model.summary())
 
     # model.fit_generator(train_generator,
     #                     steps_per_epoch=steps,
@@ -52,13 +75,17 @@ def train_model(train_generator, val_generator, model):
     #                     validation_data=validation_generator,
     #                     validation_steps=num_val_samples / batch_size)
 
-    model.fit_generator(
+    tb_call_back = TensorBoard(log_dir='./graphs/',
+                               histogram_freq=0, write_graph=True,
+                               write_images=True)
+
+    new_model.fit_generator(
         train_generator, steps_per_epoch=train_count / BATCH_SIZE,
         epochs=NUM_EPOCHS, validation_data=val_generator,
-        validation_steps=valid_count / BATCH_SIZE,
-        use_multiprocessing=True)#, callbacks=[tb_call_back])
+        validation_steps=valid_count / BATCH_SIZE, callbacks=[tb_call_back])
+
     print('saving!!!')
-    return model
+    return new_model
 
 
 def save_features(train_data):
