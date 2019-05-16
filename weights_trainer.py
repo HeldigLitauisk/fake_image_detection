@@ -1,5 +1,6 @@
 import os
 import ssl
+import time
 from argparse import ArgumentParser
 from keras.applications import ResNet50, VGG16, VGG19, InceptionV3, \
     MobileNetV2, InceptionResNetV2, Xception, \
@@ -27,18 +28,18 @@ MODELS = {
     'MobileNetV2': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': MobileNetV2},
     'VGG19': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': VGG19},
     'NASNetMobile': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': NASNetMobile},
-    'InceptionResNetV2': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionResNetV2},
-    'InceptionV3': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionV3},
+    'InceptionResNetV2': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionResNetV2},
+    'InceptionV3': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionV3},
     'ResNet50': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': ResNet50},
-    'Xception': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': Xception},
+    'Xception': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': Xception},
 }
 CHANNELS = 3
 NUMBER_OF_CLASSES = 1
-NUM_EPOCHS = 50
+NUM_EPOCHS = 32
 BATCH_SIZE = 16
 # Change FULLY CONNECTED layers setup here
-# LAYERS = [10, 'DROPOUT', 10, 'DROPOUT', 10]
-LAYERS = [10]
+LAYERS = [1028, 'DROPOUT', 1028, 'DROPOUT', 100]
+# LAYERS = [10]
 
 
 def create_base_model(model):
@@ -145,12 +146,12 @@ def show_stats(errors, validation_dir, show_images=False):
         round(wrong_real / len(errors) * 100), 2))
 
 
-def main():
+def main(data_type):
     parser = ArgumentParser(__doc__)
     parser.add_argument("--train_data", required=False,
                         help="where training data is located")
     args = parser.parse_args()
-    train_dir = os.path.relpath('./data/data_combined/training')
+    train_dir = os.path.relpath('./data/{}/training'.format(data_type))
     if args.train_data:
         train_dir = args.train_data
 
@@ -163,11 +164,22 @@ def main():
         round(real_count / train_sample_count * 100), 2))
 
     for key, value in MODELS.items():
-        training_features = './features/{}_{}_{}_features_10k.npz'.format(
-            key, 'combined', 'training')
+        training_features = './features/{}_{}_training_features.npz'.format(
+            key, data_type)
 
-        x_train, y_train, train_filenames = load_features(training_features, 'train')
-        x_valid, y_valid, valid_filenames = load_features(training_features.replace('training', 'validation'), 'valid')
+        model_file = './models/{}_{}_model.h5'.format(
+            key, data_type)
+
+        if os.path.exists(model_file):
+            print('File already exists: {}'.format(model_file))
+            continue
+
+        try:
+            x_train, y_train, train_filenames = load_features(training_features, 'train')
+            x_valid, y_valid, valid_filenames = load_features(training_features.replace('training', 'validation'), 'valid')
+        except Exception as e:
+            print(e)
+            continue
 
         layers_repr = '-'.join(str(e) for e in LAYERS)
         model_name = '{}_[{}]'.format(key, layers_repr)
@@ -215,7 +227,7 @@ def main():
 
         history = model.fit(
             x_train, y_train, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE,
-            validation_data=(x_valid, y_valid))# callbacks=[tb_call_back])
+            validation_data=(x_valid, y_valid), callbacks=[tb_call_back])
 
         # x_validation = history.validation_data[0]
         # y_validation = history.validation_data[1]
@@ -231,10 +243,9 @@ def main():
         show_stats(missclassified, train_dir.replace('training', 'validation'),
                    show_images=False)
 
-        model.save(os.path.relpath("./models/{}_model_score-{}.h5".format(
-            model_name, int(scores[1] * 100))))
-        model.save_weights(os.path.relpath('./weights/{}_weights_score-{}.h5'.format(
-            model_name, int(scores[1] * 100))))
+        model.save(os.path.relpath(model_file))
+        model.save_weights(os.path.relpath('./weights/{}_{}_weights_score-{}.h5'.format(
+            key, data_type, int(scores[1] * 100))))
 
         c_matrix = confusion_matrix(y_true=np.round(y_valid, 0),
                                     y_pred=np.round(predictions, 0))
@@ -242,4 +253,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    while True:
+        main('data_gan')
+        main('data_photoshop')
+        time.sleep(60)

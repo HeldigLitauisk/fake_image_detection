@@ -56,9 +56,8 @@ def extract_features(generator, model):
     return features, labels
 
 
-def save_features(train_data):
+def save_features(train_data, data_type):
     for model_key, model_values in MODELS.items():
-        data_type = train_data.split('_')[-1].split('/')[0]
         training_file = './features/{}_{}_training_features.npz'.format(
             model_key, data_type)
         validation_file = training_file.replace('training', 'validation')
@@ -89,12 +88,12 @@ def generate_from_dir(train_dir, model):
     return x_train, y_train, train_filenames
 
 
-def main():
+def main(type):
     parser = ArgumentParser(__doc__)
     parser.add_argument("--train_data", required=False,
                         help="directory for features extraction")
     args = parser.parse_args()
-    train_data = os.path.relpath('./data/data_photoshop/training/')
+    train_data = os.path.relpath('./data/{}/training/'.format(type))
     if args.train_data:
         train_data = args.train_data
 
@@ -104,8 +103,9 @@ def main():
     print('Data sample count: {}'.format(train_sample_count))
 
     for i in range(0, len(MODELS)):
-        save_features(train_data)
+        save_features(train_data, type)
 
 
 if __name__ == "__main__":
-    main()
+    # main('data_gan')
+    main('data_photoshop')
