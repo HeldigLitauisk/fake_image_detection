@@ -1,20 +1,39 @@
 import os
-
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.patches as patches
 from random import randint
-from tqdm import tqdm, tqdm_gui
 from face_align.align import AlignDlib
 
-IMG_SIZE = 225
-SHOW_IMAGES = True
+IMG_SIZE = 300
+SHOW_IMAGES = False
+FLIP_IMAGES = False
+VALIDATION_PCT = 10
+TEST_PCT = 10
+
 from image_loader import load_metadata
 
-target_dir = 'data/data_photoshop/'
-metadata = load_metadata('data/data_raw/sample/')
+# target_dir = 'data/data_photoshop/'
+target_dir = 'data/data_gan/'
+metadata = load_metadata('data/data_raw/data_raw_gan/')
+# metadata = load_metadata('data/data_raw/data_raw_photoshop/')
 np.random.shuffle(metadata)
+
+
+def create_dirs():
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir)
+    if not os.path.exists(os.path.join(target_dir, 'test')):
+        os.makedirs(os.path.join(target_dir, 'test'))
+        os.makedirs(os.path.join(target_dir, 'test', 'gnr_fake'))
+        os.makedirs(os.path.join(target_dir, 'test', 'gnr_real'))
+        os.makedirs(os.path.join(target_dir, 'training'))
+        os.makedirs(os.path.join(target_dir, 'training', 'gnr_fake'))
+        os.makedirs(os.path.join(target_dir, 'training', 'gnr_real'))
+        os.makedirs(os.path.join(target_dir, 'validation'))
+        os.makedirs(os.path.join(target_dir, 'validation', 'gnr_fake'))
+        os.makedirs(os.path.join(target_dir, 'validation', 'gnr_real'))
 
 
 def load_image(path):
@@ -42,12 +61,14 @@ def show_bounding_box(pic_orig, aligned, bb):
     plt.show()
 
 
-images_count = 0
-for pic in tqdm(metadata):
+print("Total amount of data found: {}".format(len(metadata)))
+val_counter = int(len(metadata) * VALIDATION_PCT / 100)
+test_counter = int(len(metadata) * TEST_PCT / 100)
+create_dirs()
+for pic in metadata:
     try:
         if not pic.image_path().endswith('.png') and not pic.image_path().endswith('.jpg'):
             continue
-        images_count += 1
 
         pic_orig = load_image(pic.image_path())
         bb = alignment.getLargestFaceBoundingBox(pic_orig)
@@ -56,10 +77,12 @@ for pic in tqdm(metadata):
         pic_id = randint(0, 1000000)
         pic_name = pic.image_path().split('/')[-1]
 
-        if images_count % 5 == 0:
+        if test_counter != 0:
             new_path = os.path.join(target_dir, 'test', )
-        elif images_count % 4 == 0:
+            test_counter -= 1
+        elif val_counter != 0:
             new_path = os.path.join(target_dir, 'validation')
+            val_counter -= 1
         else:
             new_path = os.path.join(target_dir, 'training')
 
@@ -72,10 +95,10 @@ for pic in tqdm(metadata):
             show_bounding_box(pic_orig, aligned, bb)
         else:
             plt.imsave(new_path, aligned)
-            if '/training/' in new_path and 'gnr_fake' in new_path:
+            if '/training/' in new_path and 'gnr_fake' in new_path and FLIP_IMAGES:
                 aligned2 = alignment.align(IMG_SIZE, pic_orig, bb,
                                           landmarkIndices=AlignDlib.INNER_EYES_AND_BOTTOM_LIP)
                 flipped_im = np.fliplr(aligned2)
                 plt.imsave(new_path.replace('.jpg', '_flipped.jpg').replace('.png', '_flipped.png'), flipped_im)
-    except Exception:
-        print('Failed: {}'.format(pic.image_path()))
+    except Exception as e:
+        print('Failed: {} with error: {}'.format(pic.image_path(), e))

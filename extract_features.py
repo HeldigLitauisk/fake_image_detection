@@ -8,17 +8,17 @@ from keras.preprocessing.image import ImageDataGenerator
 from tqdm import tqdm
 
 ssl._create_default_https_context = ssl._create_unverified_context
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 
 MODELS = {
     'DenseNet201': {'IMG_SIZE': 224, 'PROCESSING': 'torch', 'TRANSFER_LEARNING': DenseNet201},
     'MobileNetV2': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': MobileNetV2},
     'VGG19': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': VGG19},
     'NASNetMobile': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': NASNetMobile},
-    'InceptionResNetV2': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionResNetV2},
-    'InceptionV3': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionV3},
+    'InceptionResNetV2': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionResNetV2},
+    'InceptionV3': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionV3},
     'ResNet50': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': ResNet50},
-    'Xception': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': Xception},
+    'Xception': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': Xception},
 }
 
 
@@ -59,7 +59,7 @@ def extract_features(generator, model):
 def save_features(train_data):
     for model_key, model_values in MODELS.items():
         data_type = train_data.split('_')[-1].split('/')[0]
-        training_file = './features/{}_{}_training_features_10k.npz'.format(
+        training_file = './features/{}_{}_training_features.npz'.format(
             model_key, data_type)
         validation_file = training_file.replace('training', 'validation')
         if not os.path.exists(training_file):
@@ -94,7 +94,7 @@ def main():
     parser.add_argument("--train_data", required=False,
                         help="directory for features extraction")
     args = parser.parse_args()
-    train_data = os.path.relpath('./data/data_combined/training/')
+    train_data = os.path.relpath('./data/data_photoshop/training/')
     if args.train_data:
         train_data = args.train_data
 
