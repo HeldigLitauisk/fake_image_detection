@@ -37,11 +37,11 @@ def get_feat_count(output_shape):
     return count
 
 
-def get_pretrained_model(model_name):
+def get_pretrained_model(model_name, photos_type):
     model_dir = os.path.join(os.path.curdir, 'models')
     weights_dir = os.path.join(os.path.curdir, 'weights')
     for model in os.listdir(weights_dir):
-        if model_name.lower() in model.lower():
+        if model_name.lower() in model.lower() and photos_type in model.lower():
             print(os.path.join(model_dir, model))
             model_path = '{}.h5'.format(model.replace('/weights/', '/models/').replace('_weights_', '_model_').split('_score')[0])
             pretrained_model = load_model(os.path.join(os.path.join(model_dir, model_path)))
@@ -69,7 +69,9 @@ def eval_model(train_dir, model_name, evaluation=False):
     if evaluation:
         return generator.labels[0:len(generator.labels)+1]
 
-    pretrained_model = get_pretrained_model(model_name)
+    photos_type = 'photoshop' if 'photoshop' in train_dir else 'flipped' if 'flipped' in train_dir else 'gan'
+    print(photos_type)
+    pretrained_model = get_pretrained_model(model_name, photos_type)
     predictions = []
     score = 0
     for inputs_batch, labels_batch in generator:
