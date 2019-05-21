@@ -38,8 +38,17 @@ NUMBER_OF_CLASSES = 1
 NUM_EPOCHS = 32
 BATCH_SIZE = 16
 # Change FULLY CONNECTED layers setup here
-LAYERS = [1028, 'DROPOUT', 1028, 'DROPOUT', 100]
-# LAYERS = [10]
+LAYERS_EVOLUTION = [
+    [64, 'DROPOUT', 64, 'DROPOUT', 64],
+    [32, 'DROPOUT', 32, 'DROPOUT', 32],
+    [16, 'DROPOUT', 16, 'DROPOUT', 16],
+    [10, 'DROPOUT', 10, 'DROPOUT', 10],
+    [64],
+    [32],
+    [16],
+    [10],
+    # [1028, 'DROPOUT', 1028, 'DROPOUT', 100]
+]
 
 
 def create_base_model(model):
@@ -181,13 +190,6 @@ def main(data_type):
             print(e)
             continue
 
-        layers_repr = '-'.join(str(e) for e in LAYERS)
-        model_name = '{}_[{}]'.format(key, layers_repr)
-
-        tb_call_back = TensorBoard(log_dir='./graphs/{}/'.format(model_name),
-                                   histogram_freq=0, write_graph=True,
-                                   write_images=True)
-
         print('Original data split: {}'.format(x_train.shape))
 
         base_model = create_base_model(value)
@@ -206,54 +208,64 @@ def main(data_type):
         # y_train = shuffle_array(y_train, indices)
         # train_filenames = shuffle_array(train_filenames, indices)
 
-        model = Sequential()
-        # ------------------- FC --------------------- #
-        if len(LAYERS):
-            model.add(Dense(LAYERS[0], activation='relu', input_dim=dimensions,
-                            name='fc_input'))
-        for layer in LAYERS:
-            if 'D' in str(layer):
-                model.add(Dropout(DROPOUT))
-            else:
-                model.add(Dense(int(layer), activation='relu'))
-        model.add(Dense(NUMBER_OF_CLASSES, activation=DENSE_LAYER_ACTIVATION,
-                        name='fc_output'))
-        # ------------------- FC --------------------- #
-        model.compile(optimizer=OPTIMIZER(lr=LR),
-        # model.compile(optimizer=SGD2,
-                      loss=LOSS,
-                      metrics=METRIC)
-        print(model.summary())
+        for LAYERS in LAYERS_EVOLUTION:
+            layers_repr = '-'.join(str(e) for e in LAYERS)
+            model_name = '{}_[{}]'.format(key, layers_repr)
 
-        history = model.fit(
-            x_train, y_train, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE,
-            validation_data=(x_valid, y_valid), callbacks=[tb_call_back])
+            tb_call_back = TensorBoard(
+                log_dir='./graphs/{}/'.format(model_name),
+                histogram_freq=0, write_graph=True,
+                write_images=True)
 
-        # x_validation = history.validation_data[0]
-        # y_validation = history.validation_data[1]
-        # train_count = train_sample_count - len(y_validation)
-        # filenames_validation = train_filenames[-(len(y_validation)):]
+            model = Sequential()
+            # ------------------- FC --------------------- #
+            if len(LAYERS):
+                model.add(Dense(LAYERS[0], activation='relu', input_dim=dimensions,
+                                name='fc_input'))
+            for layer in LAYERS:
+                if 'D' in str(layer):
+                    model.add(Dropout(DROPOUT))
+                else:
+                    model.add(Dense(int(layer), activation='relu'))
+            model.add(Dense(NUMBER_OF_CLASSES, activation=DENSE_LAYER_ACTIVATION,
+                            name='fc_output'))
+            # ------------------- FC --------------------- #
+            model.compile(optimizer=OPTIMIZER(lr=LR),
+            # model.compile(optimizer=SGD2,
+                          loss=LOSS,
+                          metrics=METRIC)
+            print(model.summary())
 
-        scores = model.evaluate(x_valid, y_valid, verbose=1)
-        print("Accuracy: %.2f%%" % (scores[1] * 100))
+            history = model.fit(
+                x_train, y_train, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE,
+                validation_data=(x_valid, y_valid), callbacks=[tb_call_back])
 
-        missclassified, predictions = get_misclassified(
-            model, x_valid, y_valid, valid_filenames)
+            # x_validation = history.validation_data[0]
+            # y_validation = history.validation_data[1]
+            # train_count = train_sample_count - len(y_validation)
+            # filenames_validation = train_filenames[-(len(y_validation)):]
 
-        show_stats(missclassified, train_dir.replace('training', 'validation'),
-                   show_images=False)
+            scores = model.evaluate(x_valid, y_valid, verbose=1)
+            print("Accuracy: %.2f%%" % (scores[1] * 100))
 
-        model.save(os.path.relpath(model_file))
-        model.save_weights(os.path.relpath('./weights/{}_{}_weights_score-{}.h5'.format(
-            key, data_type, int(scores[1] * 100))))
+            missclassified, predictions = get_misclassified(
+                model, x_valid, y_valid, valid_filenames)
 
-        c_matrix = confusion_matrix(y_true=np.round(y_valid, 0),
-                                    y_pred=np.round(predictions, 0))
-        print(c_matrix)
+            show_stats(missclassified, train_dir.replace('training', 'validation'),
+                       show_images=False)
+
+            model.save(os.path.relpath(model_file))
+            model.save_weights(os.path.relpath('./weights/{}_{}_weights_score-{}.h5'.format(
+                key, data_type, int(scores[1] * 100))))
+
+            c_matrix = confusion_matrix(y_true=np.round(y_valid, 0),
+                                        y_pred=np.round(predictions, 0))
+            print(c_matrix)
 
 
 if __name__ == "__main__":
     while True:
-        main('data_gan')
-        main('data_photoshop')
+        main('data_flipped')
+        # main('data_gan')
+        # main('data_photoshop')
         time.sleep(60)

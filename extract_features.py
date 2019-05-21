@@ -107,5 +107,6 @@ def main(type):
 
 
 if __name__ == "__main__":
+    main('data_flipped')
     # main('data_gan')
-    main('data_photoshop')
+    # main('data_photoshop')
