@@ -12,15 +12,14 @@ from tensorflow.python.keras.models import load_model
 ssl._create_default_https_context = ssl._create_unverified_context
 
 MODELS = {
-    'InceptionResNetV2': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionResNetV2},
-    'InceptionV3': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionV3},
     'DenseNet201': {'IMG_SIZE': 224, 'PROCESSING': 'torch', 'TRANSFER_LEARNING': DenseNet201},
-    # 'MobileNetV2': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': MobileNetV2},
-    # 'ResNet50': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': ResNet50},
-    # 'VGG19': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': VGG19},
-    # 'Xception': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': Xception},
-    # 'NASNetLarge': {'IMG_SIZE': 244, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': NASNetLarge},
-    # 'NASNetMobile': {'IMG_SIZE': 244, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': NASNetMobile},
+    'MobileNetV2': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': MobileNetV2},
+    'VGG19': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': VGG19},
+    'NASNetMobile': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': NASNetMobile},
+    'InceptionResNetV2': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionResNetV2},
+    'InceptionV3': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionV3},
+    'ResNet50': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': ResNet50},
+    'Xception': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': Xception},
 }
 
 
@@ -41,14 +40,15 @@ def get_feat_count(output_shape):
 def get_pretrained_model(model_name):
     model_dir = os.path.join(os.path.curdir, 'models')
     weights_dir = os.path.join(os.path.curdir, 'weights')
-    for model in os.listdir(model_dir):
+    for model in os.listdir(weights_dir):
         if model_name.lower() in model.lower():
             print(os.path.join(model_dir, model))
-            pretrained_model = load_model(os.path.join(model_dir, model))
-            weights_path = model.replace('models', 'weights').replace('_model_', '_weights_')
-            pretrained_model.load_weights(os.path.join(weights_dir, weights_path))
+            model_path = '{}.h5'.format(model.replace('/weights/', '/models/').replace('_weights_', '_model_').split('_score')[0])
+            pretrained_model = load_model(os.path.join(os.path.join(model_dir, model_path)))
+            pretrained_model.load_weights(os.path.join(os.path.join(weights_dir, model)))
             print('Loaded model: {}'.format(model_name))
             return pretrained_model
+    raise Exception('no model found')
 
 
 def eval_model(train_dir, model_name, evaluation=False):
