@@ -37,13 +37,16 @@ def get_feat_count(output_shape):
     return count
 
 
-def get_pretrained_model(model_name, photos_type):
-    model_dir = os.path.join(os.path.curdir, 'models')
-    weights_dir = os.path.join(os.path.curdir, 'weights')
+def get_pretrained_model(model_name, photos_type, model_dir=False, weights_dir=False):
+    model_dir = model_dir if model_dir else os.path.join(os.path.curdir, 'models')
+    weights_dir = os.path.join(os.path.curdir, weights_dir) if weights_dir else os.path.join(os.path.curdir, 'weights')
+    print(weights_dir)
     for model in os.listdir(weights_dir):
+        print(model)
         if model_name.lower() in model.lower() and photos_type in model.lower():
             print(os.path.join(model_dir, model))
             model_path = '{}.h5'.format(model.replace('/weights/', '/models/').replace('_weights_', '_model_').split('_score')[0])
+            print(model_path)
             pretrained_model = load_model(os.path.join(os.path.join(model_dir, model_path)))
             pretrained_model.load_weights(os.path.join(os.path.join(weights_dir, model)))
             print('Loaded model: {}'.format(model_name))
@@ -51,7 +54,7 @@ def get_pretrained_model(model_name, photos_type):
     raise Exception('no model found')
 
 
-def eval_model(train_dir, model_name, evaluation=False):
+def eval_model(train_dir, model_name, weights, evaluation=False):
     print(model_name)
     model = MODELS[model_name]
     img_size = model['IMG_SIZE']
@@ -71,7 +74,7 @@ def eval_model(train_dir, model_name, evaluation=False):
 
     photos_type = 'photoshop' if 'photoshop' in train_dir else 'flipped' if 'flipped' in train_dir else 'gan'
     print(photos_type)
-    pretrained_model = get_pretrained_model(model_name, photos_type)
+    pretrained_model = get_pretrained_model(model_name, photos_type, weights_dir=weights)
     predictions = []
     score = 0
     for inputs_batch, labels_batch in generator:
@@ -101,6 +104,8 @@ def main():
                         help="picture for prediction")
     parser.add_argument("--predict", required=False,
                         help="directory for predictions")
+    parser.add_argument("--weights", required=True, default='./weights/',
+                        help="directory for weights")
 
     args = parser.parse_args()
 
@@ -108,14 +113,14 @@ def main():
         eval_dir = os.path.relpath(args.eval)
 
         any_model = list(MODELS.keys())[0]
-        truth = eval_model(eval_dir, any_model, evaluation=True)
+        truth = eval_model(eval_dir, any_model, evaluation=True, weights=args.weights)
         print('Truth: {}'.format(truth))
 
         votes = []
 
         combined_votes = []
         for key, _ in MODELS.items():
-            single_model_vote = eval_model(eval_dir, key)
+            single_model_vote = eval_model(eval_dir, key, weights=args.weights)
             print('{}: predictions {}'.format(key, single_model_vote))
             votes.append(single_model_vote)
             item = 0
