@@ -1,4 +1,6 @@
 import os
+import random
+import shutil
 import ssl
 import time
 from argparse import ArgumentParser
@@ -8,17 +10,17 @@ from keras.applications import ResNet50, VGG16, VGG19, InceptionV3, \
 from keras.optimizers import SGD, RMSprop, Adam
 import numpy as np
 from keras.models import Sequential
-from keras.layers import Dense, Dropout
-from keras.callbacks import TensorBoard
+from keras.layers import Dense, Dropout, GlobalMaxPooling2D
+from keras.callbacks import TensorBoard, ModelCheckpoint, EarlyStopping
 from keras_preprocessing.image import load_img
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 ssl._create_default_https_context = ssl._create_unverified_context
 
-LR = [1e-3, 0.01, 2e-5, 2e-4, 1e-4, 5e-4, 146e-5][2]
+LR = [1e-3, 0.01, 2e-5, 2e-4, 1e-4, 5e-4, 146e-5]
 SGD2 = SGD(lr=LR, decay=1e-6, momentum=0.9, nesterov=True)
 # CHANGE HERE
-OPTIMIZER = [Adam, SGD, RMSprop][0]
+OPTIMIZER = [Adam, SGD, RMSprop]
 DROPOUT = [0.3, 0.4, 0.5, 0.2][0]
 DENSE_LAYER_ACTIVATION = ['softmax', 'sigmoid'][1]
 LOSS = ['binary_crossentropy', 'categorical_crossentropy'][0]
@@ -35,7 +37,7 @@ MODELS = {
 }
 CHANNELS = 3
 NUMBER_OF_CLASSES = 1
-NUM_EPOCHS = 32
+NUM_EPOCHS = 100
 BATCH_SIZE = 16
 # Change FULLY CONNECTED layers setup here
 LAYERS_EVOLUTION = [
@@ -49,6 +51,18 @@ LAYERS_EVOLUTION = [
     [10],
     # [1028, 'DROPOUT', 1028, 'DROPOUT', 100]
 ]
+
+
+def get_random_layers():
+    rnd = random.randint(2, 4096)
+    layers = [rnd]
+    for layer in range(random.randint(0, 5)):
+        if random.randint(2, 4096) % random.randint(1, 5) == 0:
+            layers.append('D')
+        else:
+            rnd = random.randint(2, rnd)
+            layers.append(rnd)
+    return layers
 
 
 def create_base_model(model):
@@ -208,7 +222,8 @@ def main(data_type):
         # y_train = shuffle_array(y_train, indices)
         # train_filenames = shuffle_array(train_filenames, indices)
 
-        for LAYERS in LAYERS_EVOLUTION:
+        for _ in range(1):
+            LAYERS = get_random_layers()
             layers_repr = '-'.join(str(e) for e in LAYERS)
             model_name = '{}_[{}]'.format(key, layers_repr)
 
@@ -219,31 +234,36 @@ def main(data_type):
 
             model = Sequential()
             # ------------------- FC --------------------- #
+            print('Random fc: {}'.format(LAYERS))
             if len(LAYERS):
                 model.add(Dense(LAYERS[0], activation='relu', input_dim=dimensions,
                                 name='fc_input'))
             for layer in LAYERS:
                 if 'D' in str(layer):
-                    model.add(Dropout(DROPOUT))
+                    model.add(Dropout(random.uniform(0.1, 5)))
                 else:
                     model.add(Dense(int(layer), activation='relu'))
             model.add(Dense(NUMBER_OF_CLASSES, activation=DENSE_LAYER_ACTIVATION,
                             name='fc_output'))
             # ------------------- FC --------------------- #
-            model.compile(optimizer=OPTIMIZER(lr=LR),
-            # model.compile(optimizer=SGD2,
+            model.compile(optimizer=OPTIMIZER[random.randint(0, len(OPTIMIZER))](lr=LR[random.randint(0, len(LR))]),
                           loss=LOSS,
                           metrics=METRIC)
             print(model.summary())
 
-            history = model.fit(
-                x_train, y_train, epochs=NUM_EPOCHS, batch_size=BATCH_SIZE,
-                validation_data=(x_valid, y_valid), callbacks=[tb_call_back])
+            es = EarlyStopping(monitor='val_acc', mode='auto', verbose=0,
+                               patience=10)
 
-            # x_validation = history.validation_data[0]
-            # y_validation = history.validation_data[1]
-            # train_count = train_sample_count - len(y_validation)
-            # filenames_validation = train_filenames[-(len(y_validation)):]
+            filepath = '{type}_{model}_weights_{layers}'.format(
+                type=data_type, model=key, layers=layers_repr)
+            checkpoint = ModelCheckpoint(filepath+'.h5', monitor='val_acc',
+                                         verbose=0, save_best_only=True,
+                                         mode='max', save_weights_only=True)
+
+            history = model.fit(
+                x_train, y_train, epochs=NUM_EPOCHS, batch_size=random.randint(1, 100),
+                validation_data=(x_valid, y_valid),
+                callbacks=[tb_call_back, checkpoint, es])
 
             scores = model.evaluate(x_valid, y_valid, verbose=1)
             print("Accuracy: %.2f%%" % (scores[1] * 100))
@@ -254,9 +274,9 @@ def main(data_type):
             show_stats(missclassified, train_dir.replace('training', 'validation'),
                        show_images=False)
 
-            model.save(os.path.relpath(model_file))
-            model.save_weights(os.path.relpath('./weights/{}_{}_weights_score-{}.h5'.format(
-                key, data_type, int(scores[1] * 100))))
+            model.save_weights(os.path.relpath('./random_weights/{}_score-{}.h5'.format(
+                filepath, round(checkpoint.best, 2))))
+            model.save(os.path.relpath('./random_models/{}'.format(filepath)))
 
             c_matrix = confusion_matrix(y_true=np.round(y_valid, 0),
                                         y_pred=np.round(predictions, 0))
@@ -265,7 +285,11 @@ def main(data_type):
 
 if __name__ == "__main__":
     while True:
-        main('data_flipped')
-        # main('data_gan')
-        # main('data_photoshop')
-        time.sleep(60)
+        try:
+            main('data_flipped')
+            # main('data_gan')
+            # main('data_photoshop')
+            # time.sleep(60)
+        except Exception as e:
+            print(e)
+            continue
