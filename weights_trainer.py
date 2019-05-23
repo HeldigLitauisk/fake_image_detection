@@ -190,12 +190,12 @@ def main(data_type):
         training_features = './features/{}_{}_training_features.npz'.format(
             key, data_type)
 
-        model_file = './models/{}_{}_model.h5'.format(
-            key, data_type)
-
-        if os.path.exists(model_file):
-            print('File already exists: {}'.format(model_file))
-            continue
+        # model_file = './models/{}_{}_model.h5'.format(
+        #     key, data_type)
+        #
+        # if os.path.exists(model_file):
+        #     print('File already exists: {}'.format(model_file))
+        #     continue
 
         try:
             x_train, y_train, train_filenames = load_features(training_features, 'train')
