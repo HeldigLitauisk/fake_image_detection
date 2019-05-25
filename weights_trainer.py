@@ -25,16 +25,16 @@ DROPOUT = [0.3, 0.4, 0.5, 0.2][0]
 DENSE_LAYER_ACTIVATION = ['softmax', 'sigmoid'][1]
 LOSS = ['binary_crossentropy', 'categorical_crossentropy'][0]
 METRIC = ['acc']
-MODELS = {
-    'DenseNet201': {'IMG_SIZE': 224, 'PROCESSING': 'torch', 'TRANSFER_LEARNING': DenseNet201},
-    'MobileNetV2': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': MobileNetV2},
-    'VGG19': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': VGG19},
-    'NASNetMobile': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': NASNetMobile},
-    'InceptionResNetV2': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionResNetV2},
-    'InceptionV3': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionV3},
-    'ResNet50': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': ResNet50},
-    'Xception': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': Xception},
-}
+MODELS = [
+    {'DenseNet201': {'IMG_SIZE': 224, 'PROCESSING': 'torch', 'TRANSFER_LEARNING': DenseNet201}},
+    {'MobileNetV2': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': MobileNetV2}},
+    {'VGG19': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': VGG19}},
+    {'NASNetMobile': {'IMG_SIZE': 224, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': NASNetMobile}},
+    {'InceptionResNetV2': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionResNetV2}},
+    {'InceptionV3': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': InceptionV3}},
+    {'ResNet50': {'IMG_SIZE': 224, 'PROCESSING': 'caffe', 'TRANSFER_LEARNING': ResNet50}},
+    {'Xception': {'IMG_SIZE': 299, 'PROCESSING': 'tf', 'TRANSFER_LEARNING': Xception}},
+]
 CHANNELS = 3
 NUMBER_OF_CLASSES = 1
 NUM_EPOCHS = 100
@@ -54,7 +54,7 @@ LAYERS_EVOLUTION = [
 
 
 def get_random_layers():
-    rnd = random.randint(2, 4096)
+    rnd = random.randint(2, 1028)
     layers = [rnd]
     for layer in range(random.randint(0, 5)):
         if random.randint(2, 4096) % random.randint(1, 5) == 0:
@@ -186,7 +186,7 @@ def main(data_type):
     print('Real % count: {}%'.format(
         round(real_count / train_sample_count * 100), 2))
 
-    for key, value in MODELS.items():
+    for key, value in MODELS[random.randint(0, len(MODELS))].items():
         training_features = './features/{}_{}_training_features.npz'.format(
             key, data_type)
 
@@ -286,8 +286,8 @@ def main(data_type):
 if __name__ == "__main__":
     while True:
         try:
-            main('data_flipped')
-            # main('data_gan')
+            # main('data_flipped')
+            main('data_gan')
             # main('data_photoshop')
             # time.sleep(60)
         except Exception as e:
