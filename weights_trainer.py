@@ -252,11 +252,12 @@ def main(data_type):
             print(model.summary())
 
             es = EarlyStopping(monitor='val_acc', mode='auto', verbose=0,
-                               patience=10)
+                               patience=5)
 
-            filepath = '{type}_{model}_weights_{layers}'.format(
+            filepath = '{type}_{model}_weights_{layers}.h5'.format(
                 type=data_type, model=key, layers=layers_repr)
-            checkpoint = ModelCheckpoint(filepath+'.h5', monitor='val_acc',
+            model.save(os.path.relpath('./gan_models/{}'.format(filepath.replace('_weights_', '_models_'))))
+            checkpoint = ModelCheckpoint(filepath, monitor='val_acc',
                                          verbose=0, save_best_only=True,
                                          mode='max', save_weights_only=True)
 
@@ -274,9 +275,8 @@ def main(data_type):
             show_stats(missclassified, train_dir.replace('training', 'validation'),
                        show_images=False)
 
-            model.save_weights(os.path.relpath('./random_weights/{}_score-{}.h5'.format(
+            model.save_weights(os.path.relpath('./gan_weights/{}_score-{}.h5'.format(
                 filepath, round(checkpoint.best, 2))))
-            model.save(os.path.relpath('./random_models/{}'.format(filepath)))
 
             c_matrix = confusion_matrix(y_true=np.round(y_valid, 0),
                                         y_pred=np.round(predictions, 0))
